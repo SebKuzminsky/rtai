@@ -1,0 +1,7 @@
+rtai (3.8.1-linuxcnc1) lucid; urgency=low
+
+  [ Moses McKnight ]
+  * Build on Lucid Lynx (10.04) / linux-image-2.6.32-122-rtai
+
+ -- Moses McKnight <moses@skytex.net>  Tue, 27 Jul 2010 19:57:34 -0500
+
