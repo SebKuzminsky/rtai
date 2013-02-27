@@ -17,6 +17,7 @@ CONFIGURE += --disable-netrpc
 
 CONFIGURE += --with-linux-dir=/usr/src/linux-headers-$(KERNEL_VER)
 CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VER)
+CONFIGURE += --with-kconfig-file=/boot/config-$(KERNEL_VER)
 
 build: build-stamp
 build-stamp:
