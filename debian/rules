@@ -3,10 +3,20 @@
 KERNEL_VER ?= $(shell uname -r)
 
 CONFIGURE := --enable-shm
+CONFIGURE += --enable-sem
+CONFIGURE += --enable-mbx
+CONFIGURE += --enable-msg
+CONFIGURE += --enable-malloc
+CONFIGURE += --enable-fifos
 
 CONFIGURE += --enable-fpu
+CONFIGURE += --enable-math=m
+CONFIGURE += --enable-math-c99
 
 CONFIGURE += --enable-cpus=8
+
+CONFIGURE += --enable-lxrt-use-linux-syscall
+CONFIGURE += --enable-ktasks-sched-lxrt
 
 CONFIGURE += --disable-leds
 CONFIGURE += --disable-rtailab
