@@ -3,13 +3,17 @@
 KERNEL_VER=2.6.32-122-rtai
 
 CONFIGURE := --enable-shm
+
 CONFIGURE += --enable-fpu
+
+CONFIGURE += --enable-cpus=8
+CONFIGURE += --enable-rtdm
+
 CONFIGURE += --enable-compat
+
 CONFIGURE += --disable-leds
 CONFIGURE += --disable-rtailab
 CONFIGURE += --disable-netrpc
-CONFIGURE += --enable-cpus=8
-CONFIGURE += --enable-rtdm
 
 CONFIGURE += --with-linux-dir=/usr/src/linux-headers-$(KERNEL_VER)
 CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VER)
