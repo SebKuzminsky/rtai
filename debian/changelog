@@ -1,3 +1,10 @@
+rtai (3.9-shabby-memleak-2013.07.31) precise; urgency=low
+
+  * Build commit 2b5f6cfe42d33a9ea23e3c7cb631840d2a0d6cc3 (master branch
+    of the ShabbyX github repo).
+
+ -- Sebastian Kuzminsky <seb@highlab.com>  Wed, 31 Jul 2013 17:09:27 -0600
+
 rtai (3.8.1-linuxcnc1) lucid; urgency=low
 
   [ Moses McKnight ]
