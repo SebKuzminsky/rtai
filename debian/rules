@@ -6,6 +6,7 @@ CONFIGURE += --with-linux-dir=/usr/src/linux-headers-$(KERNEL_VER) --prefix=/usr
 build: build-stamp
 build-stamp:
 	dh_testdir
+	./autogen.sh
 	./configure $(CONFIGURE)
 	$(MAKE)
 	touch build-stamp
