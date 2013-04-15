@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-KERNEL_VER=2.6.32-122-rtai
+KERNEL_VER ?= $(shell uname -r)
 
 CONFIGURE := --enable-shm
 
