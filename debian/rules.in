@@ -1,0 +1,110 @@
+#!/usr/bin/make -f
+
+# This gets set by debian/configure to the kernel we're building for.
+KERNEL_VER = @KERNEL_VERSION@
+
+KERNEL_DIR = /usr/src/linux-headers-$(KERNEL_VER)
+
+ARCH=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
+
+CONFIGURE := --enable-shm
+CONFIGURE += --enable-sem
+CONFIGURE += --enable-mbx
+CONFIGURE += --enable-msg
+CONFIGURE += --enable-malloc
+CONFIGURE += --enable-fifos
+CONFIGURE += --enable-serial
+CONFIGURE += --enable-16550a
+CONFIGURE += --with-16550a-ham=any
+
+CONFIGURE += --enable-fpu
+CONFIGURE += --enable-math=m
+CONFIGURE += --enable-math-c99
+
+CONFIGURE += --enable-cpus=8
+
+CONFIGURE += --enable-lxrt-use-linux-syscall
+CONFIGURE += --enable-ktasks-sched-lxrt
+
+CONFIGURE += --disable-leds
+CONFIGURE += --disable-rtailab
+CONFIGURE += --disable-netrpc
+CONFIGURE += --disable-netrpc-rtnet
+CONFIGURE += --disable-comedi-lxrt
+CONFIGURE += --disable-rtdm
+#CONFIGURE += --disable-dbx
+
+CONFIGURE += --with-linux-dir=$(KERNEL_DIR)
+CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VER)
+
+CONFIGURE += --host $(ARCH)
+
+# These are configure variables that RTAI 5 needs, but that its configure
+# script doesn't have command-line arguments for.  These settings select
+# newlib for the in-kernel math library (newlib is built as part of the
+# rtai-modules build).
+CONFIGURE += CONFIG_RTAI_MATH_LIBM_TO_USE=1
+CONFIGURE += CONFIG_RTAI_MATH_LIBM_DIR=/tmp/newlib/build/libm/libm.a
+
+
+ifeq ($(ARCH),i386)
+    NEWLIB_CONFIGURE=--disable-shared --disable-multilib --host=i386-pc-sysv CFLAGS="-O2"
+else ifeq ($(ARCH),amd64)
+    NEWLIB_CONFIGURE=--disable-shared --disable-multilib --host=x86_64-pc-none CFLAGS="-O2 -mcmodel=kernel",
+endif
+
+
+build: build-stamp
+build-stamp:
+	dh_testdir
+
+	# first build newlib
+	mkdir -p /tmp/newlib/build
+	(cd /tmp/newlib; tar -vxJf /usr/src/newlib/newlib-*.tar.xz)
+	( \
+		cd /tmp/newlib/build; \
+		/tmp/newlib/newlib-*/newlib/configure $(NEWLIB_CONFIGURE); \
+		make; \
+		find . -name libm.a; \
+	)
+
+	./configure $(CONFIGURE)
+	$(MAKE) V=1
+	touch build-stamp
+
+
+clean:
+	dh_testdir
+	rm -f build-stamp debian/rtai-modules-$(KERNEL_VER).files
+	#./configure $(CONFIGURE)
+	#$(MAKE) distclean -s
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k
+	dh_installdirs
+	mkdir -p debian/tmp
+	mkdir -p debian/tmp/etc/udev/rules.d
+	$(MAKE) install DESTDIR=`pwd`/debian/tmp
+	mkdir -p debian/tmp/lib/modules/$(KERNEL_VER)
+	(cd debian/tmp; find -not -type d) > debian/rtai-modules-$(KERNEL_VER).files
+	dh_movefiles
+
+binary: binary-indep binary-arch
+binary-indep: build install
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+	dh_installchangelogs
+	dh_installdocs
+	dh_installman
+	dh_link
+	dh_strip
+	dh_makeshlibs
+	dh_compress
+	dh_installdeb
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
