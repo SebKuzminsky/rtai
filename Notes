@@ -1,0 +1,122 @@
+
+https://github.com/ShabbyX/RTAI.git
+master branch
+
+
+make a workspace:
+
+    mkdir linux-rtai
+    cd linux-rtai
+
+
+RTAI setup:
+
+    check out the rtai git repo (https://github.com/ShabbyX/RTAI.git)
+
+    add a remote for my old git repo (git@github.com:SebKuzminsky/rtai.git)
+
+    make a new branch called prerelease-5 based on origin/master
+
+    cherry-pick the deb stuff from my prerelease-4 branch
+
+
+clone the linux-stable git repo
+
+    git clone git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.git
+
+
+Create a branch in the linux tree based on the base version of the rtai patch you want to use:
+
+    cd linux-stable
+    git branch linux-3.4-rtai v3.4.53
+    #git branch linux-3.5-rtai origin/linux-3.5.y
+    git checkout linux-3.4-rtai
+
+
+Apply the RTAI kernel patch:
+
+    (paolo's kernel patches applied with git, memleak's apply with patch)
+
+    patch -p1 < ../rtai-shabby-memleak.git/base/arch/x86/patches/hal-linux-3.4.53-x86-1.patch
+
+    # git add all the new files
+    git commit -m 'applied the rtai patch'
+
+    Hey, the rtai patch is a git patch!  Where's the rtai git repo?
+
+
+Configure the kernel and build a deb:
+
+    Start with memleak's kernel config
+
+    cd linux-stable
+    cp ../rtai-shabby-memleak.git/base/arch/x86/configs/rtai_32_defconfig .config
+    make oldconfig
+
+    # LOCALVERSION is set to '-RTAI', use 'make menuconfig' to change it to
+    # empty (we'll supply a better one to make-kpkg later)
+
+    # build this kernel and make a deb
+    # use make-kpkg, but there's also linux's "make deb-pkg"
+    # the linux tree must be clean, and HEAD must have an annotated tag, or
+    # the linux build system will mess up the version string:
+    # http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=648535
+
+    git clean -fdx .
+    cp linuxcnc-rtai-config .config
+
+    git tag -m 'dummy annotation to make the version right' v3.5.7-$REV-rtai
+
+    # the --append-to-version here should match the last part of the version tag you just made
+    fakeroot make-kpkg --revision 1 --append-to-version -2-rtai -j 2 --rootcmd fakeroot --us --uc --bzimage binary
+
+    "dpkg -i" all the debs except linux-firmware
+
+    reboot to the new kernel
+
+
+old note:
+
+    With paolo's repo i used the ubuntu config: for linux 3.5 for x86
+    (not x86-64).  Download the linux-image deb for the latest ubuntu
+    version of the right kernel version from the PPA:
+
+        https://launchpad.net/~canonical-kernel-team/+archive/ppa/+packages
+
+    Unpack the .deb:
+
+        dpkg-deb -x linux-image-3.5.0-23-generic_3.5.0-23.35_i386.deb linux-image
+
+    # start with a config that's close to what you want:
+    cp linux-image/boot/config-* linux-stable/.config
+
+    make oldconfig
+
+    # use 'make menuconfig' to set LOCALVERSION to 'rtai'
+
+
+    # build this kernel and make a deb
+    # use make-kpkg, but there's also linux's "make deb-pkg"
+    # the linux tree must be clean, and HEAD must have an annotate tag, or
+    # the linux build system will mess up the version string:
+    # http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=648535
+
+    git clean -fdx .
+    cp linuxcnc-rtai-config .config
+    git tag -m 'dummy annotation to make the version right' v3.5.7-$REV-rtai
+    fakeroot make-kpkg --revision 1 --append-to-version -2-rtai -j 2 --rootcmd fakeroot --us --uc --bzimage binary
+
+    "dpkg -i" all the debs except linux-firmware
+
+
+build rtai:
+
+    update debian/control, debian/changelog, debian/rules
+
+    fakeroot debian/rules binary
+
+
+also: 
+
+    https://www.rtai.org/RTAICONTRIB/RTAI_Installation_Guide.pdf
+
