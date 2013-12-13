@@ -1,3 +1,9 @@
+rtai (3.9-shabby-memleak-2013.12.13) precise; urgency=low
+
+  * Same version of RTAI, just a tweaked linux-image package.
+
+ -- Sebastian Kuzminsky <seb@highlab.com>  Fri, 13 Dec 2013 13:18:15 -0700
+
 rtai (3.9-shabby-memleak-2013.08.05) precise; urgency=low
 
   * Build commit a0dc5355ee233032926dd23d1e132ef1befbbd76 (master branch
