@@ -29,7 +29,6 @@ Create a branch in the linux tree based on the base version of the rtai patch yo
 
     cd linux-stable
     git branch linux-3.4-rtai v3.4.53
-    #git branch linux-3.5-rtai origin/linux-3.5.y
     git checkout linux-3.4-rtai
 
 
@@ -47,14 +46,7 @@ Apply the RTAI kernel patch:
 
 Configure the kernel and build a deb:
 
-    Start with memleak's kernel config
-
-    cd linux-stable
-    cp ../rtai-shabby-memleak.git/base/arch/x86/configs/rtai_32_defconfig .config
-    make oldconfig
-
-    # LOCALVERSION is set to '-RTAI', use 'make menuconfig' to change it to
-    # empty (we'll supply a better one to make-kpkg later)
+    memleak's kernel config: rtai-shabby-memleak.git/base/arch/x86/configs/rtai_32_defconfig .config
 
     # build this kernel and make a deb
     # use make-kpkg, but there's also linux's "make deb-pkg"
@@ -62,20 +54,20 @@ Configure the kernel and build a deb:
     # the linux build system will mess up the version string:
     # http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=648535
 
+    LINUX_VERSION=3.4.55
+    DEB_VERSION=-rtai-2
+
     git clean -fdx .
     cp linuxcnc-rtai-config .config
-
-    git tag -m 'dummy annotation to make the version right' v3.5.7-$REV-rtai
-
-    # the --append-to-version here should match the last part of the version tag you just made
-    fakeroot make-kpkg --revision 1 --append-to-version -2-rtai -j 2 --rootcmd fakeroot --us --uc --bzimage binary
+    git tag -m 'dummy annotation to make the version right' v${LINUX_VERSION}${DEB_VERSION}
+    fakeroot make-kpkg --revision 1 --append-to-version ${DEB_VERSION} --initrd -j 2 --rootcmd fakeroot --us --uc --bzimage binary
 
     "dpkg -i" all the debs except linux-firmware
 
     reboot to the new kernel
 
 
-old note:
+old obsolete note:
 
     With paolo's repo i used the ubuntu config: for linux 3.5 for x86
     (not x86-64).  Download the linux-image deb for the latest ubuntu
@@ -92,26 +84,14 @@ old note:
 
     make oldconfig
 
-    # use 'make menuconfig' to set LOCALVERSION to 'rtai'
-
-
-    # build this kernel and make a deb
-    # use make-kpkg, but there's also linux's "make deb-pkg"
-    # the linux tree must be clean, and HEAD must have an annotate tag, or
-    # the linux build system will mess up the version string:
-    # http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=648535
-
-    git clean -fdx .
-    cp linuxcnc-rtai-config .config
-    git tag -m 'dummy annotation to make the version right' v3.5.7-$REV-rtai
-    fakeroot make-kpkg --revision 1 --append-to-version -2-rtai -j 2 --rootcmd fakeroot --us --uc --bzimage binary
-
-    "dpkg -i" all the debs except linux-firmware
-
 
 build rtai:
 
-    update debian/control, debian/changelog, debian/rules
+    git clean -fdx
+
+    update debian/control
+
+    update debian/changelog (dch -v $VERSION)
 
     fakeroot debian/rules binary
 
