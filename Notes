@@ -56,11 +56,12 @@ Configure the kernel and build a deb:
 
     LINUX_VERSION=3.4.55
     DEB_VERSION=-rtai-2
+    PACKAGE_VERSION=1
 
     git clean -fdx .
     cp linuxcnc-rtai-config .config
     git tag -m 'dummy annotation to make the version right' v${LINUX_VERSION}${DEB_VERSION}
-    fakeroot make-kpkg --revision 1 --append-to-version ${DEB_VERSION} --initrd -j 2 --rootcmd fakeroot --us --uc --bzimage binary
+    fakeroot make-kpkg --revision $PACKAGE_VERSION --append-to-version ${DEB_VERSION} --initrd -j 2 --rootcmd fakeroot --us --uc --bzimage binary
 
     "dpkg -i" all the debs except linux-firmware
 
