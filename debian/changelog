@@ -1,3 +1,9 @@
+rtai (3.9-shabby-memleak-2013.12.13-1) precise; urgency=low
+
+  * Fix a packaging bug: provide shlibs info for shared libraries.
+
+ -- Sebastian Kuzminsky <seb@highlab.com>  Wed, 15 Jan 2014 17:16:50 -0700
+
 rtai (3.9-shabby-memleak-2013.12.13) precise; urgency=low
 
   * Same version of RTAI, just a tweaked linux-image package.
