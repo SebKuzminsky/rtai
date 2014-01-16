@@ -68,6 +68,15 @@ Configure the kernel and build a deb:
     reboot to the new kernel
 
 
+build rtai:
+
+    After rebooting to the new kernel, cd into the rtai repo.
+
+    git clean -fdx
+    # update debian/control
+    # update debian/changelog (dch -v $VERSION)
+    fakeroot debian/rules binary
+
 old obsolete note:
 
     With paolo's repo i used the ubuntu config: for linux 3.5 for x86
@@ -85,16 +94,6 @@ old obsolete note:
 
     make oldconfig
 
-
-build rtai:
-
-    git clean -fdx
-
-    update debian/control
-
-    update debian/changelog (dch -v $VERSION)
-
-    fakeroot debian/rules binary
 
 
 also: 
