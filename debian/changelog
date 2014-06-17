@@ -1,3 +1,9 @@
+rtai (4.0-111-g44557fc) UNRELEASED; urgency=low
+
+  * Update to the latest commit in ShabbyX RTAI repo, 44557fc.
+
+ -- Sebastian Kuzminsky <seb@highlab.com>  Tue, 17 Jun 2014 09:10:30 -0600
+
 rtai (3.9-shabby-memleak-2013.12.13-1) precise; urgency=low
 
   * Fix a packaging bug: provide shlibs info for shared libraries.
