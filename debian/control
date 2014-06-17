@@ -2,9 +2,9 @@ Source: rtai
 Section: misc
 Priority: extra
 Maintainer: Sebastian Kuzminsky <seb@highlab.com>
-Build-Depends: debhelper, autoconf, linux-headers-3.4.55-rtai-2
+Build-Depends: debhelper, autoconf, libtool, linux-headers-3.4-9-common-rtai
 
-Package: rtai-modules-3.4.55-rtai-2
+Package: rtai-modules-3.4-9
 Architecture: any
-Description: Real Time modules for linux-image-3.4.55-rtai-2
-Depends: linux-image-3.4.55-rtai-2
+Description: Real Time modules for linux-image-3.4-9-rtai
+Depends: linux-image-3.4-9-rtai-amd64
