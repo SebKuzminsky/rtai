@@ -221,12 +221,12 @@ eval linux_`grep '^SUBLEVEL =' $LINUX_KERNELSRC/Makefile | sed -e 's, ,,g'`
 eval linux_`grep '^VERSION =' $LINUX_KERNELSRC/Makefile | sed -e 's, ,,g'`
 
 dnl Load Linux kernel configuration now, before config symbols are tested.
-if test \! -r ${LINUX_KERNELOUTPUT}/.config; then
-   AC_MSG_RESULT([invalid])
-   AC_MSG_ERROR([$LINUX_KERNELOUTPUT is not configured -- --with-linux-dir sets linux-dir])
-fi
-
-. $LINUX_KERNELOUTPUT/.config
+#if test \! -r ${LINUX_KERNELOUTPUT}/.config; then
+#   AC_MSG_RESULT([invalid])
+#   AC_MSG_ERROR([$LINUX_KERNELOUTPUT is not configured -- --with-linux-dir sets linux-dir])
+#fi
+#
+#. $LINUX_KERNELOUTPUT/.config
 
 RTAI_LINUX_VERSION="$linux_VERSION.$linux_PATCHLEVEL.$linux_SUBLEVEL"
 AC_MSG_RESULT([$RTAI_LINUX_DIR (kernel ${RTAI_LINUX_VERSION}${CONFIG_SMP:+-SMP})])
