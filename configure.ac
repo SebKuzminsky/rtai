@@ -231,8 +231,13 @@ dnl
 dnl Load the Linux configuration.
 dnl
 
-LINUX_CONFIG_FILE=/boot/config-$(uname -r)
-linux_config_type='running kernel'
+if test -f $RTAI_LINUX_DIR/.config; then
+    LINUX_CONFIG_FILE=$RTAI_LINUX_DIR/.config
+    linux_config_type='from kernel src dir'
+else
+    LINUX_CONFIG_FILE=/boot/config-$(uname -r)
+    linux_config_type='running kernel'
+fi
 
 AC_ARG_WITH(linux-config,
     [  --with-linux-config=<kconfig-file>      Linux config file],
