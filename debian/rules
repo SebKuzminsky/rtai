@@ -1,9 +1,9 @@
 #!/usr/bin/make -f
 
-# set these two to the kernel you want to build for
+# set this to the kernel you want to build for
 KERNEL_VER = 3.4-9-rtai-amd64
-KERNEL_DIR = /usr/src/linux-headers-3.4-9-common-rtai
 
+KERNEL_DIR = /usr/src/linux-headers-$(KERNEL_VER)
 KERNEL_CONFIG=/boot/config-$(KERNEL_VER)
 
 CONFIGURE := --enable-shm
