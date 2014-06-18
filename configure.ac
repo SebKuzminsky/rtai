@@ -220,19 +220,39 @@ eval linux_`grep '^PATCHLEVEL =' $LINUX_KERNELSRC/Makefile | sed -e 's, ,,g'`
 eval linux_`grep '^SUBLEVEL =' $LINUX_KERNELSRC/Makefile | sed -e 's, ,,g'`
 eval linux_`grep '^VERSION =' $LINUX_KERNELSRC/Makefile | sed -e 's, ,,g'`
 
-dnl Load Linux kernel configuration now, before config symbols are tested.
-#if test \! -r ${LINUX_KERNELOUTPUT}/.config; then
-#   AC_MSG_RESULT([invalid])
-#   AC_MSG_ERROR([$LINUX_KERNELOUTPUT is not configured -- --with-linux-dir sets linux-dir])
-#fi
-#
-#. $LINUX_KERNELOUTPUT/.config
-
 RTAI_LINUX_VERSION="$linux_VERSION.$linux_PATCHLEVEL.$linux_SUBLEVEL"
 AC_MSG_RESULT([$RTAI_LINUX_DIR (kernel ${RTAI_LINUX_VERSION}${CONFIG_SMP:+-SMP})])
 if test x${CONFIG_RTAI_LINUXDIR} = x; then
    CONFIG_RTAI_LINUXDIR=$RTAI_LINUX_DIR
 fi
+
+
+dnl
+dnl Load the Linux configuration.
+dnl
+
+LINUX_CONFIG_FILE=/boot/config-$(uname -r)
+linux_config_type='running kernel'
+
+AC_ARG_WITH(linux-config,
+    [  --with-linux-config=<kconfig-file>      Linux config file],
+    [
+	case "$withval" in
+	"" | y | ye | yes | n | no)
+	    AC_MSG_ERROR([You must supply an argument to --with-linux-config.])
+	  ;;
+	esac
+	LINUX_CONFIG_FILE="$withval"
+        linux_config_type='supplied'
+    ])
+
+AC_MSG_CHECKING([for Linux config file])
+if test \! -f $LINUX_CONFIG_FILE; then
+    AC_MSG_ERROR([Linux config file $LINUX_CONFIG_FILE not found, use --with-linux-config])
+fi
+. $LINUX_CONFIG_FILE
+AC_MSG_RESULT([$LINUX_CONFIG_FILE ($linux_config_type)])
+
 
 dnl
 dnl define the name of the target arch (only matters for powerpc so far)
