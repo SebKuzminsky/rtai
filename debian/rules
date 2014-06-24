@@ -31,6 +31,7 @@ CONFIGURE += --disable-rtdm
 
 CONFIGURE += --with-linux-dir=$(KERNEL_DIR)
 CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VER)
+CONFIGURE += --host $(dpkg-architecture -qDEB_BUILD_ARCH)
 
 build: build-stamp
 build-stamp:
