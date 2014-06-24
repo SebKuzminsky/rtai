@@ -44,8 +44,9 @@ build-stamp:
 clean:
 	dh_testdir
 	rm -f build-stamp debian/rtai-modules-$(KERNEL_VER).files
-	./configure $(CONFIGURE)
-	$(MAKE) distclean -s
+	./autogen.sh
+	#./configure $(CONFIGURE)
+	#$(MAKE) distclean -s
 	dh_clean
 
 install: build
