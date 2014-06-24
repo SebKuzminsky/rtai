@@ -2,9 +2,9 @@ Source: rtai
 Section: misc
 Priority: extra
 Maintainer: Sebastian Kuzminsky <seb@highlab.com>
-Build-Depends: debhelper, automake, autoconf, libtool, linux-headers-3.4-9-common-rtai
+Build-Depends: debhelper, automake, autoconf, libtool, linux-headers-3.4-9-rtai-686-pae
 
-Package: rtai-modules-3.4-9
+Package: rtai-modules-3.4-9-686-pae
 Architecture: any
 Description: Real Time modules for linux-image-3.4-9-rtai
-Depends: linux-image-3.4-9-rtai-amd64
+Depends: linux-image-3.4-9-rtai-686-pae
