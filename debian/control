@@ -2,7 +2,7 @@ Source: rtai
 Section: misc
 Priority: extra
 Maintainer: Sebastian Kuzminsky <seb@highlab.com>
-Build-Depends: debhelper, autoconf, libtool, linux-headers-3.4-9-common-rtai
+Build-Depends: debhelper, automake, autoconf, libtool, linux-headers-3.4-9-common-rtai
 
 Package: rtai-modules-3.4-9
 Architecture: any
