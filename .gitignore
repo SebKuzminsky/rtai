@@ -18,7 +18,7 @@ rtai_config.h
 
 # Auto-generated files
 rtai_config.h.in
-configure
+/configure
 aclocal.m4
 ltversion.m4
 bin/
