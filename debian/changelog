@@ -1,25 +1,6 @@
-rtai (4.0-111-g44557fc) UNRELEASED; urgency=low
+rtai (3.9) precise; urgency=low
 
-  * Update to the latest commit in ShabbyX RTAI repo, 44557fc.
-
- -- Sebastian Kuzminsky <seb@highlab.com>  Tue, 17 Jun 2014 09:10:30 -0600
-
-rtai (3.9-shabby-memleak-2013.12.13-1) precise; urgency=low
-
-  * Fix a packaging bug: provide shlibs info for shared libraries.
-
- -- Sebastian Kuzminsky <seb@highlab.com>  Wed, 15 Jan 2014 17:16:50 -0700
-
-rtai (3.9-shabby-memleak-2013.12.13) precise; urgency=low
-
-  * Same version of RTAI, just a tweaked linux-image package.
-
- -- Sebastian Kuzminsky <seb@highlab.com>  Fri, 13 Dec 2013 13:18:15 -0700
-
-rtai (3.9-shabby-memleak-2013.08.05) precise; urgency=low
-
-  * Build commit a0dc5355ee233032926dd23d1e132ef1befbbd76 (master branch
-    of the ShabbyX github repo).
+  * RTAI 3.9 by Paolo Mantegazza.
 
  -- Sebastian Kuzminsky <seb@highlab.com>  Mon, 05 Aug 2013 23:28:40 -0600
 
