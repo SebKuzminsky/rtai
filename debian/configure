@@ -1,0 +1,24 @@
+#!/bin/bash
+
+function subst() {
+    cp $1.in $1
+    sed --in-place \
+        -e "s|@KERNEL_VERSION@|$KERNEL_VERSION|g" \
+        $*
+}
+
+
+RTAI_VERSION=$(git describe --tags | sed -e 'y/-/./')
+
+if [ -z "$1" ]; then
+    echo "usage: ./configure TARGET_KERNEL"
+    echo TARGET_KERNEL is the kernel version to compile against,
+    echo for example 3.4-9-rtai-686-pae
+    exit 1
+fi
+
+KERNEL_VERSION=$1
+
+subst debian/control
+subst debian/rules
+
