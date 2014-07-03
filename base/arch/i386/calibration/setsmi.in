@@ -1,0 +1,54 @@
+#!/bin/sh
+
+MODULENAMENOEXT=rtai_smi
+MODULENAME="${MODULENAMENOEXT}@RTAI_MODULE_EXT@"
+
+MODULEDIR=`rtai-config --module-dir`
+if test $? != 0 ; then
+	echo "cannot find rtai-config (hint: make sure it's in the path; usual location: \$PREFIX/bin)"
+	exit 1
+fi
+
+if test x"$MODULEDIR" = x ; then
+	echo "cannot find module dir"
+	exit 1
+fi
+
+# Determine if setting or resetting
+case `basename $0` in
+setsmi)
+	SMIRESET=0
+	;;
+rstsmi)
+	SMIRESET=1
+	;;
+*)
+	echo "invalid script name \"$0\""
+	exit 1
+	;;
+esac
+
+# If hal_smi_masked_bits is not set, use default
+if test x"$1" != x ; then
+	SMI_MASKED_BITS="$1"
+else
+	SMI_MASKED_BITS="0x1"
+fi
+
+# NOTE: hal_smi_masked_bits is passed also when resetting;
+# it should be harmless
+insmod "$MODULEDIR/$MODULENAME" smiReset=$SMIRESET hal_smi_masked_bits=$SMI_MASKED_BITS
+RC=$?
+if test $RC != 0 ; then
+	echo "insmod $MODULEDIR/$MODULENAME failed"
+	exit $RC
+fi
+
+rmmod "$MODULENAMENOEXT"
+RC=$?
+if test $RC != 0 ; then
+	echo "rmmod $MODULENAMENOEXT failed"
+	exit $RC
+fi
+
+exit 0

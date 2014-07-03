@@ -1,0 +1,15 @@
+OPTDIRS = drivers
+
+if CONFIG_RTAI_CPLUSPLUS
+OPTDIRS += cpp
+endif
+
+if CONFIG_RTAI_COMEDI_LXRT
+OPTDIRS += comedi
+endif
+
+if CONFIG_RTAI_RTDM
+OPTDIRS += rtdm
+endif
+
+SUBDIRS = $(OPTDIRS)
