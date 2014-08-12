@@ -5,6 +5,8 @@ Maintainer: Sebastian Kuzminsky <seb@highlab.com>
 Build-Depends: debhelper, automake, autoconf, libtool, linux-headers-@KERNEL_VERSION@
 
 Package: rtai-modules-@KERNEL_VERSION@
+Provides: rtai-modules
+Conflicts: rtai-modules-2.6.32-122-rtai, rtai-modules
 Architecture: any
 Description: RTAI Real Time modules for linux-image @KERNEL_VERSION@
 Depends: linux-image-@KERNEL_VERSION@
