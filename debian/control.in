@@ -6,7 +6,7 @@ Build-Depends: debhelper, automake, autoconf, libtool, linux-headers-@KERNEL_VER
 
 Package: rtai-modules-@KERNEL_VERSION@
 Provides: rtai-modules
-Conflicts: rtai-modules-2.6.32-122-rtai, rtai-modules
+Conflicts: rtai-modules-2.6.32-122-rtai, rtai-modules-3.4-9-rtai-686-pae, rtai-modules
 Architecture: any
 Description: RTAI Real Time modules for linux-image @KERNEL_VERSION@
 Depends: linux-image-@KERNEL_VERSION@
