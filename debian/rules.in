@@ -12,6 +12,9 @@ CONFIGURE += --enable-mbx
 CONFIGURE += --enable-msg
 CONFIGURE += --enable-malloc
 CONFIGURE += --enable-fifos
+CONFIGURE += --enable-serial
+CONFIGURE += --enable-16550a
+CONFIGURE += --with-16550a-ham=any
 
 CONFIGURE += --enable-fpu
 CONFIGURE += --enable-math=m
