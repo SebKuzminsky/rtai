@@ -1,3 +1,9 @@
+rtai (5.0~test1) UNRELEASED; urgency=medium
+
+  * Update to RTAI Vulcano, from rtai.org
+
+ -- Sebastian Kuzminsky <seb@highlab.com>  Fri, 20 Nov 2015 08:56:26 -0700
+
 rtai (3.8.1-linuxcnc1) lucid; urgency=low
 
   [ Moses McKnight ]
