@@ -6,6 +6,8 @@ KERNEL_VER = @KERNEL_VERSION@
 
 KERNEL_DIR = /usr/src/linux-headers-$(KERNEL_VER)
 
+ARCH=i386
+
 CONFIGURE := --enable-shm
 CONFIGURE += --enable-sem
 CONFIGURE += --enable-mbx
@@ -36,10 +38,13 @@ CONFIGURE += --disable-rtdm
 CONFIGURE += --with-linux-dir=$(KERNEL_DIR)
 CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VER)
 
-CONFIGURE += --host i386
+CONFIGURE += --host $(ARCH)
 #CONFIGURE += --host $(dpkg-architecture -qDEB_BUILD_ARCH)
 
-CONFIGURE += CONFIG_RTAI_MATH_LIBM_TO_USE=1
+# These are configure variables the RTAI 4.1 needs, but that it doesn't have command-line arguments for...
+# This selects the installed version of the glibc libm.a as the code for the in-kernel math library...
+CONFIGURE += CONFIG_RTAI_MATH_LIBM_TO_USE=3
+CONFIGURE += CONFIG_RTAI_MATH_LIBM_DIR=/usr/lib/$(ARCH)-linux-gnu
 
 build: build-stamp
 build-stamp:
