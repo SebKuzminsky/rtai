@@ -11,19 +11,18 @@ librtdm_a_SOURCES = \
 	drvlib.c \
 	module.c \
 	proc.c \
-	syscall.c \
-	xn.c
+	rtai_taskq.c \
+	select.c \
+	vfile.c
 
 include_HEADERS = \
 	rtdm.h \
 	rtdm_driver.h \
 	rtserial.h \
-	xn.h
-
-noinst_HEADERS = \
-	core.h \
-	device.h \
-	proc.h
+	xn.h \
+	rtai_taskq.h \
+	select.h \
+	vfile.h
 
 if CONFIG_KBUILD
 rtai_rtdm$(modext): @RTAI_KBUILD_ENV@
@@ -34,6 +33,7 @@ rtai_rtdm$(modext): $(librtdm_a_SOURCES) FORCE
 
 clean-local:
 	@RTAI_KBUILD_CLEAN@
+	rm -f FORCE
 
 distclean-local:
 	@RTAI_KBUILD_DISTCLEAN@

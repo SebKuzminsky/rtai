@@ -204,12 +204,16 @@ static struct vm_operations_struct rtai_shm_vm_ops = {
 static RTAI_SYSCALL_MODE void rt_set_heap(unsigned long, void *);
 #endif
 
+#ifdef HAVE_UNLOCKED_IOCTL
+static long rtai_shm_f_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+#else
 static int rtai_shm_f_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
+#endif
 {
 	switch (cmd) {
 		case SHM_ALLOC: {
 			TRACE_RTAI_SHM(TRACE_RTAI_EV_SHM_MALLOC, ((unsigned long *)arg)[0], cmd, current->pid);
-			return rt_shm_alloc_usp(((unsigned long *)arg)[0], ((int *)arg)[1], ((int *)arg)[2]);
+			return rt_shm_alloc_usp(((unsigned long *)arg)[0], ((long *)arg)[1], ((long *)arg)[2]);
 		}
 		case SHM_FREE: {
 			TRACE_RTAI_SHM(TRACE_RTAI_EV_SHM_FREE, arg, cmd, current->pid);
@@ -244,12 +248,16 @@ static int rtai_shm_f_mmap(struct file *file, struct vm_area_struct *vma)
 }
 
 static struct file_operations rtai_shm_fops = {
-	ioctl:	rtai_shm_f_ioctl,
-	mmap:	rtai_shm_f_mmap
+#ifdef HAVE_UNLOCKED_IOCTL
+	unlocked_ioctl:	rtai_shm_f_ioctl,
+#else
+	ioctl:		rtai_shm_f_ioctl,
+#endif
+	mmap:		rtai_shm_f_mmap
 };
 
 static struct miscdevice rtai_shm_dev = 
-	{ RTAI_SHM_MISC_MINOR, "RTAI_SHM", &rtai_shm_fops };
+	{ RTAI_SHM_MISC_MINOR, "rtai_shm", &rtai_shm_fops };
 
 #ifdef CONFIG_RTAI_MALLOC
 
@@ -654,7 +662,7 @@ struct rt_native_fun_entry rt_shm_entries[] = {
 extern int set_rt_fun_entries(struct rt_native_fun_entry *entry);
 extern void reset_rt_fun_entries(struct rt_native_fun_entry *entry);
 
-#define USE_UDEV_CLASS 1
+#define USE_UDEV_CLASS 0
 
 #if USE_UDEV_CLASS
 static class_t *shm_class = NULL;

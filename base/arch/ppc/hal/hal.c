@@ -35,6 +35,7 @@
 #include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/console.h>
@@ -89,7 +90,7 @@ static void (*rtai_isr_hook)(int cpuid);
 #ifdef CONFIG_RTAI_SCHED_ISR_LOCK
 #define RTAI_SCHED_ISR_LOCK() \
 	do { \
-		if (!rt_scheduling[cpuid = rtai_cpuid()].locked++) { \
+		if (!rt_scheduling[cpuid].locked++) { \
 			rt_scheduling[cpuid].rqsted = 0; \
 		} \
 	} while (0)
@@ -115,12 +116,28 @@ static void (*rtai_isr_hook)(int cpuid);
 #endif /* (LINUX_VERSION_CODE > KERNEL_VERSION(2,4,31) && LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0)) || LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,9) */
 
 #ifdef LOCKED_LINUX_IN_IRQ_HANDLER
-#define HAL_LOCK_LINUX()  do { sflags = rt_save_switch_to_real_time(cpuid); } while (0)
+#define HAL_LOCK_LINUX()  do { sflags = rt_save_switch_to_real_time(cpuid = rtai_cpuid()); } while (0)
 #define HAL_UNLOCK_LINUX()  do { rtai_cli(); rt_restore_switch_to_linux(sflags, cpuid); } while (0)
 #else
-#define HAL_LOCK_LINUX()  do { sflags = xchg(ipipe_root_status[cpuid], (1 << IPIPE_STALL_FLAG)); } while (0)
-#define HAL_UNLOCK_LINUX()  do { rtai_cli(); *ipipe_root_status[cpuid] = sflags; } while (0)
+#define HAL_LOCK_LINUX()  do { sflags = xchg((unsigned long *)ROOT_STATUS_ADR(cpuid), (1 << IPIPE_STALL_FLAG)); } while (0)
+#define HAL_UNLOCK_LINUX()  do { rtai_cli(); ROOT_STATUS_VAL(cpuid) = sflags; } while (0)
 #endif /* LOCKED_LINUX_IN_IRQ_HANDLER */
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,26)
+
+#define RTAI_IRQ_ACK(irq) \
+	do { \
+		rtai_realtime_irq[irq].irq_ack(irq, irq_desc + irq); \
+	} while (0)
+
+#else
+
+#define RTAI_IRQ_ACK(irq) \
+	do { \
+		((void (*)(unsigned int))rtai_realtime_irq[irq].irq_ack)(irq); \
+	} while (0)
+
+#endif
 
 #define CHECK_KERCTX()
 
@@ -149,12 +166,12 @@ do { \
         unsigned long flags, pflags, cpuid; \
 	rtai_save_flags_and_cli(flags); \
 	cpuid = rtai_cpuid(); \
-	pflags = xchg(ipipe_root_status[cpuid], 1 << IPIPE_STALL_FLAG); \
+	pflags = xchg((unsigned long *)ROOT_STATUS_ADR(cpuid), 1 << IPIPE_STALL_FLAG); \
 	rtai_save_and_lock_preempt_count()
 
 #define END_PIC() \
 	rtai_restore_preempt_count(); \
-	*ipipe_root_status[cpuid] = pflags; \
+	ROOT_STATUS_VAL(cpuid) = pflags; \
 	rtai_restore_flags(flags); \
 } while (0)
 
@@ -166,14 +183,17 @@ static atomic_t rtai_sync_count = ATOMIC_INIT(1);
 static volatile int rtai_sync_level;
 static unsigned rtai_sysreq_virq;
 struct rtai_realtime_irq_s rtai_realtime_irq[RTAI_NR_IRQS];  // declared in base/include/asm-ppc/rtai_hal.h
+
+#if LINUX_VERSION_CODE < RTAI_LT_KERNEL_VERSION_FOR_NONPERCPU
 volatile unsigned long *ipipe_root_status[RTAI_NR_CPUS];
+#endif
+
 struct calibration_data rtai_tunables;
 
 extern void *hal_syscall_handler;
 
 static RT_TRAP_HANDLER rtai_trap_handler;
 extern struct machdep_calls ppc_md;
-volatile unsigned long hal_pended;
 static unsigned rtai_sysreq_virq;
 static unsigned long rtai_sysreq_map = 1;   /* srq 0 is reserved */
 static unsigned long rtai_sysreq_pending;
@@ -191,7 +211,7 @@ static struct {
 	unsigned long label;
 } rtai_sysreq_table[RTAI_NR_SRQS];
 
-volatile unsigned long rtai_cpu_lock;
+volatile unsigned long rtai_cpu_lock[2];
 struct hal_domain_struct rtai_domain;
 volatile unsigned long rtai_cpu_realtime;
 struct rt_times rt_times;
@@ -247,7 +267,7 @@ int rt_request_irq(unsigned irq, int (*handler)(unsigned irq, void *cookie), voi
 	rtai_realtime_irq[irq].handler = (void *)handler;
 	rtai_realtime_irq[irq].cookie  = cookie;
 	rtai_realtime_irq[irq].retmode = retmode ? 1 : 0;
-	rtai_realtime_irq[irq].irq_ack = hal_root_domain->irqs[irq].acknowledge;
+	rtai_realtime_irq[irq].irq_ack = (void *)hal_root_domain->irqs[irq].acknowledge;
 	rtai_critical_exit(flags);
 
 	if (IsolCpusMask && irq < IPIPE_NR_XIRQS) {
@@ -271,7 +291,7 @@ int rt_release_irq (unsigned irq)
 
 	flags = rtai_critical_enter(NULL);
 	rtai_realtime_irq[irq].handler = NULL;
-	rtai_realtime_irq[irq].irq_ack = hal_root_domain->irqs[irq].acknowledge;
+	rtai_realtime_irq[irq].irq_ack = (void *)hal_root_domain->irqs[irq].acknowledge;
 	rtai_critical_exit(flags);
 
 	if (IsolCpusMask && irq < IPIPE_NR_XIRQS) {
@@ -291,7 +311,7 @@ int rt_set_irq_ack(unsigned irq, int (*irq_ack)(unsigned int))
 	if (irq >= RTAI_NR_IRQS) {
 		return -EINVAL;
 	}
-	rtai_realtime_irq[irq].irq_ack = irq_ack ? irq_ack : hal_root_domain->irqs[irq].acknowledge;
+	rtai_realtime_irq[irq].irq_ack = irq_ack ? irq_ack : (void *)hal_root_domain->irqs[irq].acknowledge;
 	return 0;
 }
 
@@ -344,7 +364,9 @@ void rt_shutdown_irq (unsigned irq)
 {
 	BEGIN_PIC();
 	rtai_irq_desc(irq)->shutdown(irq);
+#if LINUX_VERSION_CODE < RTAI_LT_KERNEL_VERSION_FOR_NONPERCPU
 	hal_clear_irq(hal_root_domain, irq);
+#endif
 	END_PIC();
 }
 
@@ -390,7 +412,7 @@ static inline void _rt_end_irq (unsigned irq)
 
 
 // rt_mask_and_ack_irq
-void rt_mask_and_ack_irq (unsigned irq) { irq_desc[irq].handler->ack(irq); }
+void rt_mask_and_ack_irq (unsigned irq) { rtai_irq_desc(irq)->ack(irq); }
 // rt_enable_irq
 void rt_enable_irq (unsigned irq) { _rt_enable_irq(irq); }
 // rt_mask_irq
@@ -405,9 +427,10 @@ void rt_end_irq (unsigned irq) { _rt_end_irq(irq); }
  * rt_request_linux_irq
  */
 
-int rt_request_linux_irq (unsigned irq, irqreturn_t (*handler)(int irq, void *dev_id, struct pt_regs *regs), char *name, void *dev_id)
+int rt_request_linux_irq (unsigned irq, void *handler, char *name, void *dev_id)
 {
 	unsigned long flags;
+	int retval;
 
 	if (irq >= RTAI_NR_IRQS || !handler) {
 		return -EINVAL;
@@ -417,12 +440,12 @@ int rt_request_linux_irq (unsigned irq, irqreturn_t (*handler)(int irq, void *de
 	spin_lock(&irq_desc[irq].lock);
 	if (rtai_linux_irq[irq].count++ == 0 && irq_desc[irq].action) {
 		rtai_linux_irq[irq].flags = irq_desc[irq].action->flags;
-		irq_desc[irq].action->flags |= SA_SHIRQ;
+		irq_desc[irq].action->flags |= IRQF_SHARED;
 	}
 	spin_unlock(&irq_desc[irq].lock);
 	rtai_restore_flags(flags);
 
-	request_irq(irq, handler, SA_SHIRQ, name, dev_id);
+	retval = request_irq(irq, handler, IRQF_SHARED, name, dev_id);
 
 	return 0;
 }
@@ -579,12 +602,12 @@ int rtai_decr_timer_handler(struct pt_regs *regs)
 	unsigned long cpuid;
 	unsigned long sflags;
 
-	RTAI_SCHED_ISR_LOCK();
 	HAL_LOCK_LINUX();
+	RTAI_SCHED_ISR_LOCK();
 	decr_timer_handler();
-	HAL_UNLOCK_LINUX();
 	RTAI_SCHED_ISR_UNLOCK();
-	if (test_and_clear_bit(cpuid, &hal_pended) && !test_bit(IPIPE_STALL_FLAG, ipipe_root_status[cpuid])) {
+	HAL_UNLOCK_LINUX();
+	if (!test_bit(IPIPE_STALL_FLAG, ROOT_STATUS_ADR(cpuid))) {
 		rtai_sti();
 		hal_fast_flush_pipeline(cpuid);
 		return 1;
@@ -602,6 +625,10 @@ void rt_free_apic_timers(void) { rt_free_timer(); }
 int rt_assign_irq_to_cpu (int irq, unsigned long cpus_mask) { return 0; }
 int rt_reset_irq_to_sym_mode (int irq) { return 0; }
 
+
+static int rtai_request_tickdev(void);
+
+static void rtai_release_tickdev(void);
 
 /*
  * rt_request_timer
@@ -647,10 +674,11 @@ int rt_request_timer (void (*handler)(void), unsigned tick, int use_apic)
 
 	// pass throught ipipe: register immediate timer_trap handler
 	// on i386 for a periodic mode is rt_set_timer_delay(tick); -> is set rate generator at tick; in one shot set LATCH all for the 8254 timer. Here is the same.
-	disarm_decr[rtai_cpuid()] = 1;
+	rtai_disarm_decr(rtai_cpuid(), 1);
 	rt_set_timer_delay(rt_times.periodic_tick);
 	rtai_set_gate_vector(DECR_VECTOR, rtai_decr_timer_handler, 0);
 
+	rtai_request_tickdev();
 	rtai_restore_flags(flags);
 	return 0;
 }
@@ -665,6 +693,7 @@ void rt_free_timer (void)
 	unsigned long flags;
 
 	rtai_save_flags_and_cli(flags);
+	rtai_release_tickdev();
 #ifdef CONFIG_40x
 	/* Re-enable the PIT auto-reload mode */
 	mtspr(SPRN_TCR, mfspr(SPRN_TCR) | TCR_ARE);
@@ -672,7 +701,7 @@ void rt_free_timer (void)
 	mtspr(SPRN_PIT, tb_ticks_per_jiffy);
 #endif /* CONFIG_40x */
 	rtai_reset_gate_vector(DECR_VECTOR, 0, 0);
-	disarm_decr[rtai_cpuid()] = 0;
+	rtai_disarm_decr(rtai_cpuid(), 0);
 	rtai_restore_flags(flags);
 }
 
@@ -698,7 +727,11 @@ static int rtai_hirq_dispatcher(struct pt_regs *regs)
 	unsigned long cpuid;
 	int irq;
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,14)
+	if ((irq = ppc_md.get_irq()) >= RTAI_NR_IRQS) {
+#else
 	if ((irq = ppc_md.get_irq(regs)) >= RTAI_NR_IRQS) {
+#endif
 		spurious_interrupts++;
 		return 0;
 	}
@@ -706,22 +739,24 @@ static int rtai_hirq_dispatcher(struct pt_regs *regs)
 	if (rtai_realtime_irq[irq].handler) {
 		unsigned long sflags;
 
-		RTAI_SCHED_ISR_LOCK();
 		HAL_LOCK_LINUX();
-		rtai_realtime_irq[irq].irq_ack(irq); mb();
+		RTAI_IRQ_ACK(irq);
+//		rtai_realtime_irq[irq].irq_ack(irq); mb();
+		RTAI_SCHED_ISR_LOCK();
 		rtai_realtime_irq[irq].handler(irq, rtai_realtime_irq[irq].cookie);
-		HAL_UNLOCK_LINUX();
 		RTAI_SCHED_ISR_UNLOCK();
+		HAL_UNLOCK_LINUX();
 
-		if (rtai_realtime_irq[irq].retmode || !test_and_clear_bit(cpuid, &hal_pended) || test_bit(IPIPE_STALL_FLAG, ipipe_root_status[cpuid])) {
+		if (rtai_realtime_irq[irq].retmode || test_bit(IPIPE_STALL_FLAG, ROOT_STATUS_ADR(cpuid))) {
 			return 0;
 		}
 	} else {
 		unsigned long lflags;
-		lflags = xchg(ipipe_root_status[cpuid = rtai_cpuid()], (1 << IPIPE_STALL_FLAG));
-		rtai_realtime_irq[irq].irq_ack(irq); mb();
+		lflags = xchg((unsigned long *)ROOT_STATUS_ADR(cpuid = rtai_cpuid()), (1 << IPIPE_STALL_FLAG));
+		RTAI_IRQ_ACK(irq);
+//		rtai_realtime_irq[irq].irq_ack(irq); mb();
 		hal_pend_uncond(irq, cpuid);
-		*ipipe_root_status[cpuid] = lflags;
+		ROOT_STATUS_VAL(cpuid) = lflags;
 		if (test_bit(IPIPE_STALL_FLAG, &lflags)) {
 			return 0;
 		}
@@ -975,12 +1010,9 @@ void (*rt_set_ihook (void (*hookfn)(int)))(int)
 
 void rtai_set_linux_task_priority (struct task_struct *task, int policy, int prio)
 {
-	int rc;
-
-	struct sched_param param = { prio };
-	rc = sched_setscheduler(task, policy, &param);
-	if (rc) {
-		printk("RTAI[hal]: sched_setscheduler(policy=%d,prio=%d) failed, code %d (%s -- pid=%d)\n", policy, prio, rc, task->comm, task->pid);
+	hal_set_linux_task_priority(task, policy, prio);
+	if (task->rt_priority != prio || task->policy != policy) {
+		printk("RTAI[hal]: sched_setscheduler(policy = %d, prio = %d) failed, (%s -- pid = %d)\n", policy, prio, task->comm, task->pid);
 	}
 }
 
@@ -1140,11 +1172,13 @@ int __rtai_hal_init (void)
 
 	// copy HAL proper pointers locally for a more effective use
 	for (trapnr = 0; trapnr < RTAI_NR_IRQS; trapnr++) {
-		rtai_realtime_irq[trapnr].irq_ack = hal_root_domain->irqs[trapnr].acknowledge;
+		rtai_realtime_irq[trapnr].irq_ack = (void *)hal_root_domain->irqs[trapnr].acknowledge;
 	}
+#if LINUX_VERSION_CODE < RTAI_LT_KERNEL_VERSION_FOR_NONPERCPU
 	for (trapnr = 0; trapnr < RTAI_NR_CPUS; trapnr++) {
 		ipipe_root_status[trapnr] = &hal_root_domain->cpudata[trapnr].status;
 	}
+#endif
 
 	// assign the RTAI sysrqs handler
 	hal_virtualize_irq(hal_root_domain, rtai_sysreq_virq, &rtai_lsrq_dispatcher, NULL, IPIPE_HANDLE_MASK);
@@ -1235,14 +1269,18 @@ module_exit(__rtai_hal_exit);
  * rt_printk
  */
 
+#define LINE_LENGTH 200
+
 asmlinkage int rt_printk(const char *fmt, ...)
 {
+	char line[LINE_LENGTH];
 	va_list args;
 	int r;
 
 	va_start(args, fmt);
-		r = vprintk(fmt, args);
+	r = vsnprintf(line, LINE_LENGTH, fmt, args);
 	va_end(args);
+	printk("%s", line);
 
 	return r;
 }
@@ -1254,14 +1292,16 @@ asmlinkage int rt_printk(const char *fmt, ...)
 
 asmlinkage int rt_sync_printk(const char *fmt, ...)
 {
+	char line[LINE_LENGTH];
 	va_list args;
 	int r;
 
 	va_start(args, fmt);
-		hal_set_printk_sync(&rtai_domain);
-			r = vprintk(fmt, args);
-		hal_set_printk_async(&rtai_domain);
+	r = vsnprintf(line, LINE_LENGTH, fmt, args);
 	va_end(args);
+	hal_set_printk_sync(&rtai_domain);
+	printk("%s", line);
+	hal_set_printk_async(&rtai_domain);
 
 	return r;
 }
@@ -1368,8 +1408,9 @@ EXPORT_SYMBOL(rtai_catch_event);
 
 EXPORT_SYMBOL(rtai_lxrt_dispatcher);
 EXPORT_SYMBOL(rt_scheduling);
-EXPORT_SYMBOL(hal_pended);
+#if LINUX_VERSION_CODE < RTAI_LT_KERNEL_VERSION_FOR_NONPERCPU
 EXPORT_SYMBOL(ipipe_root_status);
+#endif
 
 void up_task_sw(void *, void *);
 EXPORT_SYMBOL(up_task_sw);
@@ -1383,3 +1424,77 @@ EXPORT_SYMBOL(__restore_fpenv);
 
 EXPORT_SYMBOL(IsolCpusMask);
 
+#ifdef CONFIG_GENERIC_CLOCKEVENTS
+
+#include <linux/clockchips.h>
+#include <linux/ipipe_tickdev.h>
+
+void (*rt_linux_hrt_set_mode)(enum clock_event_mode, struct ipipe_tick_device *);
+int (*rt_linux_hrt_next_shot)(unsigned long, struct ipipe_tick_device *);
+
+/* 
+ * _rt_linux_hrt_set_mode and _rt_linux_hrt_next_shot below should serve 
+ * RTAI examples only and assume that RTAI is in periodic mode always
+ */
+
+static void _rt_linux_hrt_set_mode(enum clock_event_mode mode, struct ipipe_tick_device *hrt_dev)
+{
+	if (mode == CLOCK_EVT_MODE_ONESHOT || mode == CLOCK_EVT_MODE_SHUTDOWN) {
+		rt_times.linux_tick = 0;
+	} else if (mode == CLOCK_EVT_MODE_PERIODIC) {
+		rt_times.linux_tick = rtai_llimd((1000000000 + HZ/2)/HZ, TIMER_FREQ, 1000000000);
+	}
+}
+
+static int _rt_linux_hrt_next_shot(unsigned long delay, struct ipipe_tick_device *hrt_dev)
+{
+	rt_times.linux_time = rt_times.tick_time + rtai_llimd(delay, TIMER_FREQ, 1000000000);
+	return 0;
+}
+
+#ifdef __IPIPE_FEATURE_REQUEST_TICKDEV
+#define  IPIPE_REQUEST_TICKDEV(a, b, c, d, e)  ipipe_request_tickdev(a, (void *)(b), (void *)(c), d, e)
+#else
+#define  IPIPE_REQUEST_TICKDEV(a, b, c, d, e)  ipipe_request_tickdev(a, b, c, d)
+#endif
+
+static int rtai_request_tickdev(void)
+{
+	int mode, cpuid;
+	unsigned long timer_freq;
+	for (cpuid = 0; cpuid < num_online_cpus(); cpuid++) {
+		if ((void *)rt_linux_hrt_set_mode != (void *)rt_linux_hrt_next_shot) {
+			mode = IPIPE_REQUEST_TICKDEV("decrementer", rt_linux_hrt_set_mode, rt_linux_hrt_next_shot, cpuid, &timer_freq);
+		} else {
+			mode = IPIPE_REQUEST_TICKDEV("decrementer", _rt_linux_hrt_set_mode, _rt_linux_hrt_next_shot, cpuid, &timer_freq);
+		}
+		if (mode == CLOCK_EVT_MODE_UNUSED || mode == CLOCK_EVT_MODE_ONESHOT) {
+			rt_times.linux_tick = 0;
+		} else if (mode != CLOCK_EVT_MODE_PERIODIC) {
+			return mode;
+		}
+	}
+	return 0;
+}
+
+static void rtai_release_tickdev(void)
+{
+	int cpuid;
+	for (cpuid = 0; cpuid < num_online_cpus(); cpuid++) {
+		ipipe_release_tickdev(cpuid);
+	}
+}
+
+#else /* !CONFIG_GENERIC_CLOCKEVENTS */
+
+void (*rt_linux_hrt_set_mode)(int clock_event_mode, void *);
+int (*rt_linux_hrt_next_shot)(unsigned long, void *);
+
+static int rtai_request_tickdev(void)   { return 0; }
+
+static void rtai_release_tickdev(void)  {  return;  }
+
+#endif /* CONFIG_GENERIC_CLOCKEVENTS */
+
+EXPORT_SYMBOL(rt_linux_hrt_set_mode);
+EXPORT_SYMBOL(rt_linux_hrt_next_shot);

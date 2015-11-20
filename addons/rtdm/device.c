@@ -60,7 +60,10 @@ struct list_head *rtdm_protocol_devices;	/* hash table */
 static int name_hashkey_mask;
 static int proto_hashkey_mask;
 
-DECLARE_MUTEX(nrt_dev_lock);
+int rtdm_apc;
+EXPORT_SYMBOL(rtdm_apc);
+
+struct semaphore nrt_dev_lock;
 DEFINE_XNLOCK(rt_dev_lock);
 
 #ifndef MODULE
@@ -70,6 +73,14 @@ int rtdm_initialised = 0;
 int rtdm_no_support(void)
 {
 	return -ENOSYS;
+}
+
+int rtdm_select_bind_no_support(struct rtdm_dev_context *context,
+				struct xnselector *selector,
+				unsigned type,
+				unsigned index)
+{
+	return -EBADF;
 }
 
 static inline int get_name_hash(const char *str, int limit, int hashkey_mask)
@@ -213,6 +224,10 @@ int rtdm_dev_register(struct rtdm_device *device)
 		RTAI_ASSERT(RTDM, ANY_HANDLER(*device, open),
 			    xnlogerr("RTDM: missing open handler\n");
 			    return -EINVAL;);
+		if (device->open_rt &&
+		    device->socket_rt != (void *)rtdm_no_support)
+		        xnlogerr("RTDM: RT open handler is deprecated, "
+				 "driver requires update.\n");
 		SET_DEFAULT_OP_IF_NULL(*device, open);
 		SET_DEFAULT_OP(*device, socket);
 		break;
@@ -222,6 +237,10 @@ int rtdm_dev_register(struct rtdm_device *device)
 		RTAI_ASSERT(RTDM, ANY_HANDLER(*device, socket),
 			    xnlogerr("RTDM: missing socket handler\n");
 			    return -EINVAL;);
+		if (device->socket_rt &&
+		    device->socket_rt != (void *)rtdm_no_support)
+			xnlogerr("RTDM: RT socket creation handler is "
+				 "deprecated, driver requires update.\n");
 		SET_DEFAULT_OP_IF_NULL(*device, socket);
 		SET_DEFAULT_OP(*device, open);
 		break;
@@ -236,7 +255,11 @@ int rtdm_dev_register(struct rtdm_device *device)
 		xnlogerr("RTDM: missing non-RT close handler\n");
 		return -EINVAL;
 	}
-	if (!device->ops.close_rt)
+	if (device->ops.close_rt &&
+	    device->ops.close_rt != (void *)rtdm_no_support)
+		xnlogerr("RTDM: RT close handler is deprecated, driver "
+			 "requires update.\n");
+	else
 		device->ops.close_rt = (void *)rtdm_no_support;
 
 	SET_DEFAULT_OP_IF_NULL(device->ops, ioctl);
@@ -244,6 +267,8 @@ int rtdm_dev_register(struct rtdm_device *device)
 	SET_DEFAULT_OP_IF_NULL(device->ops, write);
 	SET_DEFAULT_OP_IF_NULL(device->ops, recvmsg);
 	SET_DEFAULT_OP_IF_NULL(device->ops, sendmsg);
+	if (!device->ops.select_bind)
+		device->ops.select_bind = rtdm_select_bind_no_support;
 
 	atomic_set(&device->reserved.refcount, 0);
 	device->reserved.exclusive_context = NULL;
@@ -265,6 +290,13 @@ int rtdm_dev_register(struct rtdm_device *device)
 	down(&nrt_dev_lock);
 
 	if ((device->device_flags & RTDM_DEVICE_TYPE_MASK) == RTDM_NAMED_DEVICE) {
+		trace_mark(xn_rtdm, nameddev_register, "device %p name %s "
+			   "flags %d class %d sub_class %d profile_version %d "
+			   "driver_version %d", device, device->device_name,
+			   device->device_flags, device->device_class,
+			   device->device_sub_class, device->profile_version,
+			   device->driver_version);
+
 		hashkey =
 		    get_name_hash(device->device_name, RTDM_MAX_DEVNAME_LEN,
 				  name_hashkey_mask);
@@ -280,10 +312,9 @@ int rtdm_dev_register(struct rtdm_device *device)
 			}
 		}
 
-#ifdef CONFIG_PROC_FS
-		if ((ret = rtdm_proc_register_device(device)) < 0)
+		ret = rtdm_proc_register_device(device);
+		if (ret)
 			goto err;
-#endif /* CONFIG_PROC_FS */
 
 		xnlock_get_irqsave(&rt_dev_lock, s);
 		list_add_tail(&device->reserved.entry,
@@ -292,6 +323,15 @@ int rtdm_dev_register(struct rtdm_device *device)
 
 		up(&nrt_dev_lock);
 	} else {
+		trace_mark(xn_rtdm, protocol_register, "device %p "
+			   "protocol_family %d socket_type %d flags %d "
+			   "class %d sub_class %d profile_version %d "
+			   "driver_version %d", device,
+			   device->protocol_family, device->socket_type,
+			   device->device_flags, device->device_class,
+			   device->device_sub_class, device->profile_version,
+			   device->driver_version);
+
 		hashkey = get_proto_hash(device->protocol_family,
 					 device->socket_type);
 
@@ -311,10 +351,9 @@ int rtdm_dev_register(struct rtdm_device *device)
 			}
 		}
 
-#ifdef CONFIG_PROC_FS
-		if ((ret = rtdm_proc_register_device(device)) < 0)
+		ret = rtdm_proc_register_device(device);
+		if (ret)
 			goto err;
-#endif /* CONFIG_PROC_FS */
 
 		xnlock_get_irqsave(&rt_dev_lock, s);
 		list_add_tail(&device->reserved.entry,
@@ -374,6 +413,9 @@ int rtdm_dev_unregister(struct rtdm_device *device, unsigned int poll_delay)
 	if (!reg_dev)
 		return -ENODEV;
 
+	trace_mark(xn_rtdm, dev_unregister, "device %p poll_delay %u",
+		   device, poll_delay);
+
 	down(&nrt_dev_lock);
 	xnlock_get_irqsave(&rt_dev_lock, s);
 
@@ -383,6 +425,7 @@ int rtdm_dev_unregister(struct rtdm_device *device, unsigned int poll_delay)
 
 		if (!poll_delay) {
 			rtdm_dereference_device(reg_dev);
+			trace_mark(xn_rtdm, dev_busy, "device %p", device);
 			return -EAGAIN;
 		}
 
@@ -390,6 +433,7 @@ int rtdm_dev_unregister(struct rtdm_device *device, unsigned int poll_delay)
 			xnlogwarn("RTDM: device %s still in use - waiting for "
 				  "release...\n", reg_dev->device_name);
 		msleep(poll_delay);
+		trace_mark(xn_rtdm, dev_poll, "device %p", device);
 
 		down(&nrt_dev_lock);
 		xnlock_get_irqsave(&rt_dev_lock, s);
@@ -399,10 +443,7 @@ int rtdm_dev_unregister(struct rtdm_device *device, unsigned int poll_delay)
 
 	xnlock_put_irqrestore(&rt_dev_lock, s);
 
-#ifdef CONFIG_PROC_FS
-	remove_proc_entry("information", device->proc_entry);
-	remove_proc_entry(device->proc_name, rtdm_proc_root);
-#endif /* CONFIG_PROC_FS */
+	rtdm_proc_unregister_device(device);
 
 	up(&nrt_dev_lock);
 
@@ -417,19 +458,30 @@ EXPORT_SYMBOL(rtdm_dev_unregister);
 
 int __init rtdm_dev_init(void)
 {
-	int i;
+	int err, i;
+
+	sema_init(&nrt_dev_lock, 1);
+
+	rtdm_apc = rthal_apc_alloc("deferred RTDM close", rtdm_apc_handler,
+				   NULL);
+	if (rtdm_apc < 0)
+		return rtdm_apc;
 
 	name_hashkey_mask = devname_hashtab_size - 1;
 	proto_hashkey_mask = protocol_hashtab_size - 1;
 	if (((devname_hashtab_size & name_hashkey_mask) != 0) ||
-	    ((protocol_hashtab_size & proto_hashkey_mask) != 0))
-		return -EINVAL;
+	    ((protocol_hashtab_size & proto_hashkey_mask) != 0)) {
+		err = -EINVAL;
+		goto err_out1;
+	}
 
 	rtdm_named_devices = (struct list_head *)
 	    kmalloc(devname_hashtab_size * sizeof(struct list_head),
 		    GFP_KERNEL);
-	if (!rtdm_named_devices)
-		return -ENOMEM;
+	if (!rtdm_named_devices) {
+		err = -ENOMEM;
+		goto err_out1;
+	}
 
 	for (i = 0; i < devname_hashtab_size; i++)
 		INIT_LIST_HEAD(&rtdm_named_devices[i]);
@@ -438,14 +490,33 @@ int __init rtdm_dev_init(void)
 	    kmalloc(protocol_hashtab_size * sizeof(struct list_head),
 		    GFP_KERNEL);
 	if (!rtdm_protocol_devices) {
-		kfree(rtdm_named_devices);
-		return -ENOMEM;
+		err = -ENOMEM;
+		goto err_out2;
 	}
 
 	for (i = 0; i < protocol_hashtab_size; i++)
 		INIT_LIST_HEAD(&rtdm_protocol_devices[i]);
 
 	return 0;
+
+err_out2:
+	kfree(rtdm_named_devices);
+
+err_out1:
+	rthal_apc_free(rtdm_apc);
+
+	return err;
+}
+
+void rtdm_dev_cleanup(void)
+{
+	/*
+	 * Note: no need to flush the cleanup_queue as no device is allowed
+	 * to deregister as long as there are references.
+	 */
+	rthal_apc_free(rtdm_apc);
+	kfree(rtdm_named_devices);
+	kfree(rtdm_protocol_devices);
 }
 
 /*@}*/

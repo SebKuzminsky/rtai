@@ -4,6 +4,10 @@ COPYRIGHT (C) 2003  Lorenzo Dozio (dozio@aero.polimi.it)
 		    Roberto Bucher (roberto.bucher@supsi.ch)
 		    Peter Brier (pbrier@dds.nl)
 		    Alberto Sechi (albertosechi@libero.it)
+                    Rob Dye (rdye@telos-systems.com)
+
+Modified March 2009 by Robert Dye (rdye@telos-systems.com)
+Modified August 2009 by Henrik Slotholt (rtai@slotholt.net)
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -1536,7 +1540,7 @@ static void *rt_get_scope_data(void *arg)
 	char GetScopeDataMbxName[7];
 	long GetScopeDataPort;
 	int MsgData = 0, MsgLen, MaxMsgLen, TracesBytes;
-	float MsgBuf[MAX_MSG_LEN/sizeof(float)];
+	double MsgBuf[MAX_MSG_LEN/sizeof(double)];
 	int n, nn, js, jl;
 	int index = ((Args_T *)arg)->index;
 	char *mbx_id = strdup(((Args_T *)arg)->mbx_id);
@@ -1559,7 +1563,7 @@ static void *rt_get_scope_data(void *arg)
 		printf("Error in getting %s mailbox address\n", GetScopeDataMbxName);
 		return (void *)1;
 	}
-	TracesBytes = (Scopes[index].ntraces + 1)*sizeof(float);
+	TracesBytes = (Scopes[index].ntraces + 1)*sizeof(double);
 	MaxMsgLen = (MAX_MSG_LEN/TracesBytes)*TracesBytes;
 	MsgLen = (((int)(TracesBytes*REFRESH_RATE*(1./Scopes[index].dt)))/TracesBytes)*TracesBytes;
 	if (MsgLen < TracesBytes) MsgLen = TracesBytes;
@@ -1593,7 +1597,7 @@ static void *rt_get_scope_data(void *arg)
 			msleep(10);
 		}
 		Fl::lock();
-		js = 1;
+		js = 1; // Drop sampletime
 		for (n = 0; n < MsgData; n++) {
 			for (nn = 0; nn < Scopes[index].ntraces; nn++) {
 				Scope_Win->Plot->add_to_trace(nn, MsgBuf[js++]);
@@ -1752,12 +1756,21 @@ static int get_scope_blocks_info(long port, RT_TASK *task, const char *mbx_id)
 	}
 	if (n_scopes > 0) Scopes = new Target_Scopes_T [n_scopes];
 	for (int n = 0; n < n_scopes; n++) {
-		char scope_name[MAX_NAMES_SIZE];
+		char name[MAX_NAMES_SIZE];
 		Scopes[n].visible = false;
 		RT_rpcx(Target_Node, port, task, &n, &Scopes[n].ntraces, sizeof(int), sizeof(int));
-		RT_rpcx(Target_Node, port, task, &n, &scope_name, sizeof(int), sizeof(scope_name));
-		strncpy(Scopes[n].name, scope_name, MAX_NAMES_SIZE);
-		RT_rpcx(Target_Node, port, task, &n, &Scopes[n].dt, sizeof(int), sizeof(float));
+		RT_rpcx(Target_Node, port, task, &n, &name, sizeof(int), sizeof(name));
+		Scopes[n].name = (char*)malloc(strlen(name)+1);
+		strcpy(Scopes[n].name, name);
+		Scopes[n].traceName = (char**)malloc(sizeof(char*)*Scopes[n].ntraces);
+		int j;
+		for(j=0; j<Scopes[n].ntraces; j++) {
+			RT_rpcx(Target_Node, port, task, &j, &name, sizeof(int), sizeof(name));
+			Scopes[n].traceName[j] = (char*)malloc(strlen(name)+1);
+			strcpy(Scopes[n].traceName[j], name);
+		}
+		j=-1;
+		RT_rpcx(Target_Node, port, task, &j, &Scopes[n].dt, sizeof(int), sizeof(float));
 	}
 	RT_rpcx(Target_Node, port, task, &req, &msg, sizeof(int), sizeof(int));
 
@@ -2011,6 +2024,13 @@ static void rlg_update_after_connect(void)
 	Fl::unlock();
 }
 
+
+static Commands abort_connection(long Target_Port) {
+	RLG_Connect_Button->deactivate();
+	rt_release_port(Target_Node, Target_Port);
+	exit(1);
+}
+
 static void *rt_target_interface(void *args)
 {
 	unsigned int code, U_Request;
@@ -2036,15 +2056,21 @@ static void *rt_target_interface(void *args)
 				if (Verbose) {
 					printf("Reading target settings\n");
 				}
+				Fl::lock();
 				rlg_read_pref(CONNECT_PREF, "rtailab", 0);
+				Fl::unlock();
 				if (!strcmp(Preferences.Target_IP, "0")) {
 					Target_Node = 0;
 				} else {
 					Target_Port = try_to_connect(Preferences.Target_IP);
+					Fl::lock();
 					RLG_Connect_Button->activate();
+					Fl::unlock();
 					if (Target_Port <= 0) {
+					        Fl::lock();
 						RLG_Main_Status->label("Sorry, no route to target");
 						RLG_Main_Window->redraw();
+						Fl::unlock();
 						if (Verbose) {
 							printf(" Sorry, no route to target\n");
 						}
@@ -2056,8 +2082,10 @@ static void *rt_target_interface(void *args)
 					}
 				}
 				if (!(If_Task = (RT_TASK *)RT_get_adr(Target_Node, Target_Port, Preferences.Target_Interface_Task_Name))) {
-					RLG_Main_Status->label("No target or bad interface task identifier");
+				        Fl::lock();
+				        RLG_Main_Status->label("No target or bad interface task identifier");
 					RLG_Main_Window->redraw();
+					Fl::unlock();
 					if (Verbose) {
 						printf("No target or bad interface task identifier\n");
 					}
@@ -2086,7 +2114,17 @@ static void *rt_target_interface(void *args)
 					for (int n = 0; n < Num_Scopes; n++) {
 						printf("Scope: %s\n", Scopes[n].name);
 						printf(" Number of traces...%d\n", Scopes[n].ntraces);
+						for(int j = 0; j < Scopes[n].ntraces; j++) {
+							printf("  %s\n", Scopes[n].traceName[j]);
+						}
 						printf(" Sampling time...%f\n", Scopes[n].dt);
+						if (Scopes[n].dt <= 0.) {
+							printf("Fatal Error, Scope %s sampling time is equal to %f,\n", Scopes[n].name, Scopes[n].dt);
+							printf("while Rtai-lab needs a finite, positive sampling time\n");
+							printf("This error often occurs when the sampling time is inherited\n");
+							printf("from so-called time-continous simulink blocks\n");
+							abort_connection(Target_Port);
+						}
 					}
 				}
 				Num_Logs = get_log_blocks_info(Target_Port, If_Task, Preferences.Target_Log_Mbx_ID);
@@ -2097,6 +2135,13 @@ static void *rt_target_interface(void *args)
 						printf(" Number of rows...%d\n", Logs[n].nrow);
 						printf(" Number of cols...%d\n", Logs[n].ncol);
 						printf(" Sampling time...%f\n", Logs[n].dt);
+						if (Logs[n].dt <= 0.) {
+							printf("Fatal Error, Log %s sampling time is equal to %f,\n", Logs[n].name, Logs[n].dt);
+							printf("while Rtai-lab needs a finite, positive sampling time\n");
+							printf("This error often occurs when the sampling time is inherited\n");
+							printf("from so-called time-continous simulink blocks\n");
+							abort_connection(Target_Port);
+						}
 					}
 				}
 				Num_ALogs = get_alog_blocks_info(Target_Port, If_Task, Preferences.Target_ALog_Mbx_ID);
@@ -2107,6 +2152,13 @@ static void *rt_target_interface(void *args)
 						printf(" Number of rows...%d\n", ALogs[n].nrow);
 						printf(" Number of cols...%d\n", ALogs[n].ncol);
 						printf(" Sampling time...%f\n", ALogs[n].dt);
+						if (ALogs[n].dt <= 0.) {
+							printf("Fatal Error, Log %s sampling time is equal to %f,\n", ALogs[n].name, ALogs[n].dt);
+							printf("while Rtai-lab needs a finite, positive sampling time\n");
+							printf("This error often occurs when the sampling time is inherited\n");
+							printf("from so-called time-continous simulink blocks\n");
+							abort_connection(Target_Port);
+						}
 					}
 				}
 				Num_Leds = get_led_blocks_info(Target_Port, If_Task, Preferences.Target_Led_Mbx_ID);
@@ -2116,6 +2168,13 @@ static void *rt_target_interface(void *args)
 						printf("Led: %s\n", Leds[n].name);
 						printf(" Number of leds...%d\n", Leds[n].n_leds);
 						printf(" Sampling time...%f\n", Leds[n].dt);
+						if (Leds[n].dt <= 0.) {
+							printf("Fatal Error, Led %s samplig time is equal to %f,\n", Leds[n].name, Leds[n].dt);
+							printf("while Rtai-lab needs a finite, positive sampling time\n");
+							printf("This error often occurs when the sampling time is inherited\n");
+							printf("from so-called time-continous simulink blocks\n");
+							abort_connection(Target_Port);
+						}
 					}
 				}
 				Num_Meters = get_meter_blocks_info(Target_Port, If_Task, Preferences.Target_Meter_Mbx_ID);
@@ -2124,6 +2183,13 @@ static void *rt_target_interface(void *args)
 					for (int n = 0; n < Num_Meters; n++) {
 						printf("Meter: %s\n", Meters[n].name);
 						printf(" Sampling time...%f\n", Meters[n].dt);
+						if (Meters[n].dt <= 0.) {
+							printf("Fatal Error, Meter %s samplig time is equal to %f,\n", Meters[n].name, Meters[n].dt);
+							printf("while Rtai-lab needs a finite, positive sampling time\n");
+							printf("This error often occurs when the sampling time is inherited\n");
+							printf("from so-called time-continous simulink blocks\n");
+							abort_connection(Target_Port);
+						}
 					}
 				}
 				Num_Synchs = get_synch_blocks_info(Target_Port, If_Task, Preferences.Target_Synch_Mbx_ID);
@@ -2132,8 +2198,16 @@ static void *rt_target_interface(void *args)
 					for (int n = 0; n < Num_Synchs; n++) {
 						printf("Synchronoscope: %s\n", Synchs[n].name);
 						printf(" Sampling time...%f\n", Synchs[n].dt);
+						if (Synchs[n].dt <= 0.) {
+							printf("Fatal Error, Synchronoscope %s samplig time is equal to %f,\n", Synchs[n].name, Synchs[n].dt);
+							printf("while Rtai-lab needs a finite, positive sampling time\n");
+							printf("This error often occurs when the sampling time is inherited\n");
+							printf("from so-called time-continous simulink blocks\n");
+							abort_connection(Target_Port);
+						}
 					}
 				}
+				Fl::lock();
 				Is_Target_Connected = 1;
 				rlg_manager_window(Num_Tunable_Parameters, PARAMS_MANAGER, false, 0, 0, 430, 260);
 				rlg_manager_window(Num_Scopes, SCOPES_MANAGER, false, 0, 290, 480, 300);
@@ -2142,6 +2216,7 @@ static void *rt_target_interface(void *args)
 				rlg_manager_window(Num_Leds, LEDS_MANAGER, false, 500, 290, 320, 250);
 				rlg_manager_window(Num_Meters, METERS_MANAGER, false, 530, 320, 320, 250);
 				rlg_manager_window(Num_Synchs, SYNCHS_MANAGER, false, 530, 320, 320, 250);
+				Fl::unlock();
 				if (Verbose) {
 					printf("Target %s is correctly connected\n", RLG_Target_Name);
 				}
@@ -2217,7 +2292,9 @@ static void *rt_target_interface(void *args)
 					pthread_create(&Get_Synch_Data_Thread[n], NULL, rt_get_synch_data, &thr_args);
 					rt_receive(0, &msg);
 				}
+				Fl::lock();
 				rlg_update_after_connect();
+				Fl::unlock();
 				RT_RETURN(task, CONNECT_TO_TARGET);
 				break;
 
@@ -2228,6 +2305,7 @@ static void *rt_target_interface(void *args)
 				int p_idx;
 				const char *p_file;
 
+				// Probably should have a lock of some sort around this, but not the Fl lock.
 				if (!Direct_Profile) {
 					p_tree = (Fl_Browser *)RLG_Connect_wProfile_Tree;
 					p = p_tree->goto_focus();
@@ -2241,15 +2319,21 @@ static void *rt_target_interface(void *args)
 				if (Verbose) {
 					printf("Reading profile %s settings\n", p_file);
 				}
+				Fl::lock();
 				rlg_read_pref(PROFILE_PREF, p_file, p_idx);
+				Fl::unlock();
 				if (!strcmp(Profile[p_idx].Target_IP, "0")) {
 					Target_Node = 0;
 				} else {
 					Target_Port = try_to_connect(Profile[p_idx].Target_IP);
+					Fl::lock();
 					RLG_Connect_wProfile_Button->activate();
+					Fl::unlock();
 					if (Target_Port <= 0) {
+					        Fl::lock();
 						RLG_Main_Status->label("Sorry, no route to the specified target");
 						RLG_Main_Window->redraw();
+						Fl::unlock();
 						if (Verbose) {
 							printf(" Sorry, no route to the specified target\n");
 						}
@@ -2261,8 +2345,10 @@ static void *rt_target_interface(void *args)
 					}
 				}
 				if (!(If_Task = (RT_TASK *)RT_get_adr(Target_Node, Target_Port, Profile[p_idx].Target_Interface_Task_Name))) {
+				        Fl::lock();
 					RLG_Main_Status->label("No target with the specified interface task name");
 					RLG_Main_Window->redraw();
+					Fl::unlock();
 					if (Verbose) {
 						printf("No target with the specified interface task name\n");
 					}
@@ -2276,6 +2362,7 @@ static void *rt_target_interface(void *args)
 				Num_Leds = get_led_blocks_info(Target_Port, If_Task, Profile[p_idx].Target_Led_Mbx_ID);
 				Num_Meters = get_meter_blocks_info(Target_Port, If_Task, Profile[p_idx].Target_Meter_Mbx_ID);
 				Num_Synchs = get_synch_blocks_info(Target_Port, If_Task, Profile[p_idx].Target_Synch_Mbx_ID);
+				Fl::lock();
 				Is_Target_Connected = 1;
 				rlg_manager_window(Num_Tunable_Parameters, PARAMS_MANAGER,
 						   Profile[p_idx].P_Mgr_W.visible, Profile[p_idx].P_Mgr_W.x,
@@ -2322,6 +2409,7 @@ static void *rt_target_interface(void *args)
 						Synchs_Manager->show_hide(i, true);
 					}
 				}
+				Fl::unlock();
 				if (Verbose) {
 					printf("Target is correctly connected\n");
 				}
@@ -2337,6 +2425,7 @@ static void *rt_target_interface(void *args)
 					thr_args.h = Profile[p_idx].S_W[n].h;
 					pthread_create(&Get_Scope_Data_Thread[n], NULL, rt_get_scope_data, &thr_args);
 					rt_receive(0, &msg);
+					Fl::lock();
 					Scopes_Manager->b_color(n, Profile[p_idx].S_Bg_C[n]);
 					Scopes_Manager->g_color(n, Profile[p_idx].S_Grid_C[n]);
 					if (!Profile[p_idx].S_Mgr_Grid[n]) {
@@ -2351,7 +2440,6 @@ static void *rt_target_interface(void *args)
 					Scopes_Manager->file_name(n, Profile[p_idx].S_Mgr_File[n]);
 					Scopes_Manager->Scope_Windows[n]->Plot->trigger_mode( Profile[p_idx].S_Mgr_Trigger[n]);
 					Scopes_Manager->Scope_Windows[n]->Plot->scope_flags( Profile[p_idx].S_Mgr_Flags[n]);
-					
 
 					for (int t = 0; t < Scopes[n].ntraces; t++) {
 						if (!Profile[p_idx].S_Mgr_T_Show[t][n]) {
@@ -2363,6 +2451,7 @@ static void *rt_target_interface(void *args)
 						Scopes_Manager->trace_width(n, t, Profile[p_idx].S_Mgr_T_Width[t][n]);
  						Scopes_Manager->trace_flags(n, t, Profile[p_idx].S_Mgr_T_Options[t][n]);
 					}
+					Fl::unlock();
 				}
 				if (Num_Logs > 0) Get_Log_Data_Thread = new pthread_t [Num_Logs];
 				for (int n = 0; n < Num_Logs; n++) {
@@ -2372,12 +2461,14 @@ static void *rt_target_interface(void *args)
 					thr_args.mbx_id = strdup(Profile[p_idx].Target_Log_Mbx_ID);
 					pthread_create(&Get_Log_Data_Thread[n], NULL, rt_get_log_data, &thr_args);
 					rt_receive(0, &msg);
+					Fl::lock();
 					if (!Profile[p_idx].Log_Mgr_PT[n]) {
 						Logs_Manager->points_time(n, false);
 					} 
 					Logs_Manager->p_save(n, Profile[p_idx].Log_Mgr_PSave[n]);
 					Logs_Manager->t_save(n, Profile[p_idx].Log_Mgr_TSave[n]);
 					Logs_Manager->file_name(n, Profile[p_idx].Log_Mgr_File[n]);
+					Fl::unlock();
 				}
 				if (Num_ALogs > 0) Get_ALog_Data_Thread = new pthread_t [Num_ALogs];
 				for (int n = 0; n < Num_ALogs; n++) {
@@ -2389,7 +2480,9 @@ static void *rt_target_interface(void *args)
 					thr_args.mbx_id = strdup(Profile[p_idx].Target_ALog_Mbx_ID);
 					pthread_create(&Get_ALog_Data_Thread[n], NULL, rt_get_alog_data, &thr_args);
 					rt_receive(0, &msg);
+					Fl::lock();
 					ALogs_Manager->file_name(n, Profile[p_idx].ALog_Mgr_File[n]);
+					Fl::unlock();
 				}
 				if (Num_Leds > 0) Get_Led_Data_Thread = new pthread_t [Num_Leds];
 				for (int n = 0; n < Num_Leds; n++) {
@@ -2403,7 +2496,9 @@ static void *rt_target_interface(void *args)
 					thr_args.h = Profile[p_idx].Led_W[n].h;
 					pthread_create(&Get_Led_Data_Thread[n], NULL, rt_get_led_data, &thr_args);
 					rt_receive(0, &msg);
+					Fl::lock();
 					Leds_Manager->color(n, Profile[p_idx].Led_Mgr_Color[n]);
+					Fl::unlock();
 				}
 				if (Num_Meters > 0) Get_Meter_Data_Thread = new pthread_t [Num_Meters];
 				for (int n = 0; n < Num_Meters; n++) {
@@ -2417,11 +2512,13 @@ static void *rt_target_interface(void *args)
 					thr_args.h = Profile[p_idx].M_W[n].h;
 					pthread_create(&Get_Meter_Data_Thread[n], NULL, rt_get_meter_data, &thr_args);
 					rt_receive(0, &msg);
+					Fl::lock();
 					Meters_Manager->minv(n, Profile[p_idx].M_Mgr_Minv[n]);
 					Meters_Manager->maxv(n, Profile[p_idx].M_Mgr_Maxv[n]);
 					Meters_Manager->b_color(n, Profile[p_idx].M_Bg_C[n]);
 					Meters_Manager->a_color(n, Profile[p_idx].M_Arrow_C[n]);
 					Meters_Manager->g_color(n, Profile[p_idx].M_Grid_C[n]);
+					Fl::unlock();
 				}
 				if (Num_Synchs > 0) Get_Synch_Data_Thread = new pthread_t [Num_Synchs];
 				for (int n = 0; n < Num_Synchs; n++) {
@@ -2436,7 +2533,9 @@ static void *rt_target_interface(void *args)
 					pthread_create(&Get_Synch_Data_Thread[n], NULL, rt_get_synch_data, &thr_args);
 					rt_receive(0, &msg);
 				}
+				Fl::lock();
 				rlg_update_after_connect();
+				Fl::unlock();
 
 				RT_RETURN(task, CONNECT_TO_TARGET_WITH_PROFILE);
 				break;
@@ -2502,8 +2601,17 @@ static void *rt_target_interface(void *args)
 				rt_release_port(Target_Node, Target_Port);
 				Target_Port = 0;
 				free(Tunable_Parameters);
+				for(int n = 0; n < Num_Scopes; n++) { // Free memory used by names in scopes
+					free(Scopes[n].name);
+					for(int j = 0; j < Scopes[n].ntraces; j++) {
+						free(Scopes[n].traceName[j]);
+					}
+					free(Scopes[n].traceName);
+				}
+				Fl::lock();
 				RLG_Main_Status->label("Ready...");
 				RLG_Main_Window->redraw();
+				Fl::unlock();
 				if (Verbose) {
 					printf("Disconnected succesfully.\n");
 				}
@@ -2518,8 +2626,10 @@ static void *rt_target_interface(void *args)
 					}
 					U_Request = 's';
 					RT_rpc(Target_Node, Target_Port, If_Task, U_Request, &Is_Target_Running);
+				        Fl::lock();
 					RLG_Start_Button->deactivate();
 					RLG_Stop_Button->activate();
+					Fl::unlock();
 					if (Verbose) {
 						printf("ok\n");
 					}
@@ -2643,6 +2753,7 @@ static void *rt_target_interface(void *args)
 						}
 					}
 				}
+				// Do we need an Fl:lock() here? I'm not sure
 				Parameters_Manager->reload_params();
 				RT_RETURN(task, GET_PARAMS);
 				break;
@@ -2993,6 +3104,12 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	/* Quothe the fltk doc's: "The main thread must call lock() once
+	 * before <i>any</i> call to fltk to initial the thread system."
+	 * So, I moved this call up above the first rlg_*() call.
+	 */
+	Fl::lock();
+
 	rlg_read_pref(GEOMETRY_PREF, "rtailab", 0);
 	rlg_read_pref(PROFILES_PREF, "rtailab", 0);
 	Profile = (Profile_T *)calloc(Preferences.Num_Profiles, sizeof(Profile_T));
@@ -3012,13 +3129,11 @@ int main(int argc, char **argv)
 	RLG_Save_Profile_Dialog = rlg_save_profile_dialog(250, 100);
 	RLG_Delete_Profile_Dialog = rlg_delete_profile_dialog(250, 200);
 //	RLG_Text_Window = rlg_text_window(200, 200);
-
 	RLG_Main_Window->show();
 //	RLG_Main_Window->show(argc, argv);
 
-	Fl::lock();
 	pthread_create(&Target_Interface_Thread, NULL, rt_target_interface, NULL);
-	rt_receive(0, &msg);
+	rt_receive(0, &msg); // Wait for thread to start (it does an rt_send).
 
 	if (Direct_Profile) {
 		RT_RPC(Target_Interface_Task, CONNECT_TO_TARGET_WITH_PROFILE, 0);

@@ -1,7 +1,8 @@
-all: install
+all: 
 
-SCILAB_VERSION = 5.1
+SCILAB_VERSION = 5.3.0
 SCILAB_DIR = /usr/local/scilab-$(SCILAB_VERSION)/share/scilab
+SCILAB=scilab5
 
 RTAIDIR = $(shell rtai-config --prefix)
 
@@ -11,13 +12,27 @@ LIBDIR     =  $(SCILAB_DIR)/
 RTAISRC  = builder.sce loader.sce
 RTAISUBDIR = etc macros RT_templates src
 
-install:
+install: install_static
+
+install_static:
 	mkdir -p $(CONTRIBDIR)
 	cd RTAI; cp $(RTAISRC) $(CONTRIBDIR)
 	cd RTAI; cp -dpR $(RTAISUBDIR) $(CONTRIBDIR)
-	cd $(CONTRIBDIR); scilab -nw -f builder.sce; exit
-	cp -dpR libs $(SCILAB_DIR)
+	cd $(CONTRIBDIR)/RT_templates; rm rtai_sh.mak;
+	cd $(CONTRIBDIR); $(SCILAB) -nw -f builder.sce; exit
+	cd libs; tar xvfz scicoslibs.tgz;
+	mkdir -p $(SCILAB_DIR)/libs; cp -dpR libs/*.a $(SCILAB_DIR)/libs
 	cd devices; make; make install
+	cp devices/machine.h $(SCILAB_DIR)/../../include/scilab/scicos
+
+install_shared:
+	mkdir -p $(CONTRIBDIR)
+	cd RTAI; cp $(RTAISRC) $(CONTRIBDIR)
+	cd RTAI; cp -dpR $(RTAISUBDIR) $(CONTRIBDIR)
+	cd $(CONTRIBDIR)/RT_templates; rm rtai.mak; mv rtai_sh.mak rtai.mak;
+	cd $(CONTRIBDIR); $(SCILAB) -nw -f builder.sce; exit
+	cd devices; make; make install
+	cp devices/machine.h $(SCILAB_DIR)/../../include/scilab/scicos
 
 user:
 	mkdir -p ~/.Scilab/scilab-$(SCILAB_VERSION)

@@ -17,6 +17,7 @@ rtai_16550A$(modext): $(lib16550A_a_SOURCES) FORCE
 
 clean-local:
 	@RTAI_KBUILD_CLEAN@
+	rm -f FORCE
 
 distclean-local:
 	@RTAI_KBUILD_DISTCLEAN@
@@ -29,6 +30,7 @@ INCLUDES = \
 	@RTAI_KMOD_CFLAGS@ \
 	-I$(top_srcdir)/base/include \
 	-I$(top_srcdir)/addons \
+	-I$(top_srcdir)/addons/drivers/16550A/ \
 	-I../../../base/include \
 	-I../..
 
@@ -52,4 +54,4 @@ uninstall-local:
 .PHONY: FORCE
 
 EXTRA_DIST = $(distfiles) Makefile.kbuild \
-	     16550A_io.h 16550A_pnp.h
+	     16550A_io.h 16550A_pci.h 16550A_pnp.h

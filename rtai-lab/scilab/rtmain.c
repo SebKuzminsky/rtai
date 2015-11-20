@@ -3,6 +3,9 @@
   Paolo Mantegazza (mantegazza@aero.polimi.it)
   Roberto Bucher (roberto.bucher@supsi.ch)
   Daniele Gasperini (daniele.gasperini@elet.polimi.it)
+  Guillaume Millet <millet@isir.fr>
+
+  Modified August 2009 by Henrik Slotholt (rtai@slotholt.net)
 
   This library is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
@@ -34,13 +37,14 @@
 
 #include <sys/mman.h>
 #include <sys/poll.h>
+#include <sys/io.h>
 
 #include <rtai_netrpc.h>
 #include <rtai_msg.h>
 #include <rtai_mbx.h>
 #include <rtai_fifos.h>
 
-#define RTAILAB_VERSION         "3.4.7"
+#define RTAILAB_VERSION         "3.7.1"
 #define MAX_ADR_SRCH      500
 #define MAX_NAME_SIZE     256
 #define MAX_SCOPES        100
@@ -95,11 +99,15 @@ static float FinalTime           = 0.0;
 static volatile int endex;
 
 static double TIME;
-static struct { char name[MAX_NAME_SIZE]; int ntraces; } rtaiScope[MAX_SCOPES];
+static struct { char *name; char **traceName; int ntraces; } rtaiScope[MAX_SCOPES];
 static struct { char name[MAX_NAME_SIZE]; int nrow, ncol; } rtaiLogData[MAX_LOGS];
 static struct { char name[MAX_NAME_SIZE]; int nrow, ncol; } rtaiALogData[MAX_LOGS];
 static struct { char name[MAX_NAME_SIZE]; int nleds; } rtaiLed[MAX_LEDS];
 static struct { char name[MAX_NAME_SIZE]; int nmeters; } rtaiMeter[MAX_METERS];
+
+static char *loadParFile = NULL;
+static char *saveParFile = NULL;
+static int parChecksum;
 
 #ifdef TASKDURATION
 RTIME RTTSKinit=0, RTTSKper;
@@ -111,14 +119,15 @@ RTIME RTTSKinit=0, RTTSKper;
 #define msleep(t)  do { poll(0, 0, t); } while (0)
 
 #define MAX_COMEDI_DEVICES      11
+#define MAX_COMEDI_COUNTERS      8
 
 void *ComediDev[MAX_COMEDI_DEVICES];
 int ComediDev_InUse[MAX_COMEDI_DEVICES] = {0};
 int ComediDev_AIInUse[MAX_COMEDI_DEVICES] = {0};
 int ComediDev_AOInUse[MAX_COMEDI_DEVICES] = {0};
 int ComediDev_DIOInUse[MAX_COMEDI_DEVICES] = {0};
+int ComediDev_CounterInUse[MAX_COMEDI_DEVICES][MAX_COMEDI_COUNTERS] = {{0}};
 
-static void DummyWait(void) { }
 static void DummySend(void) { }
 
 // this function is hacked from system.h
@@ -144,7 +153,7 @@ char *get_a_name(const char *root, char *name)
 {
   unsigned long i;
   for (i = 0; i < MAX_ADR_SRCH; i++) {
-    sprintf(name, "%s%d", root, i);
+    sprintf(name, "%s%ld", root, i);
     if (!rt_get_adr(nam2num(name))) {
       return name;
     }
@@ -152,13 +161,18 @@ char *get_a_name(const char *root, char *name)
   return 0;
 }
 
-int rtRegisterScope(const char *name, int n)
+int rtRegisterScope(char *name, char **traceName, int n)
 {
   int i;
   for (i = 0; i < MAX_SCOPES; i++) {
     if (!rtaiScope[i].ntraces) {
       rtaiScope[i].ntraces = n;
-      strncpyz(rtaiScope[i].name, name, MAX_NAME_SIZE);
+      rtaiScope[i].name = name;
+      rtaiScope[i].traceName = traceName;
+      int j;
+      for(j=0; j<n; j++) {
+        printf("%s\n",rtaiScope[i].traceName[j]);
+      }
       return 0;
     }
   }
@@ -191,7 +205,7 @@ int rtRegisterMeter(const char *name, int n)
   return -1;
 }
 
-static int rtRegisterLogData(const char *name, int nrow, int ncol)
+int rtRegisterLogData(const char *name, int nrow, int ncol)
 {
   int i;
   for (i = 0; i < MAX_SCOPES; i++) {
@@ -222,20 +236,39 @@ static unsigned long TimingEventArg;
 #define XSTR(x)    #x
 #define STR(x)     XSTR(x)
 
-#define MODELNAME  STR(MODELN)
-#include MODELNAME
+/* #define MODELNAME  STR(MODELN) */
+/* #include MODELNAME */
 
-double get_scicos_time()
+int NAME(MODEL,_useInternTimer)(void);
+void rtextclk(void);
+int NAME(MODEL,_init)(void);
+int NAME(MODEL,_isr)(double);
+int NAME(MODEL,_end)(void);
+double NAME(MODEL,_get_tsamp)(void);
+double NAME(MODEL,_get_tsamp_delay)(void);
+
+extern int NTOTRPAR;
+extern int NTOTIPAR;
+extern double RPAR[];
+extern int IPAR[];
+extern int NRPAR;
+extern int NIPAR;
+extern char * strRPAR[];
+extern char * strIPAR[];
+extern int lenRPAR[];
+extern int lenIPAR[];
+
+double get_scicos_time(void)
 {
   return(TIME);
 }
 
 static inline int rtModifyRParam(int i, double *param)
 {
-  if (i >= 0 && i < NTOTRPAR1) {
-    set_double(&RPAR1[i], param);
+  if (i >= 0 && i < NTOTRPAR) {
+    set_double(&RPAR[i], param);
     if (verbose) {
-      printf("RPAR1[%d] : %le.\n", i, RPAR1[i]);
+      printf("RPAR[%d] : %le.\n", i, RPAR[i]);
     }
     return 0;
   }
@@ -244,10 +277,10 @@ static inline int rtModifyRParam(int i, double *param)
 
 static inline int rtModifyIParam(int i, int param)
 {
-  if (i >= 0 && i < NTOTIPAR1) {
-    IPAR1[i] = param;
+  if (i >= 0 && i < NTOTIPAR) {
+    IPAR[i] = param;
     if (verbose) {
-      printf("IPAR1[%d] : %d.\n", i, IPAR1[i]);
+      printf("IPAR[%d] : %d.\n", i, IPAR[i]);
     }
     return 0;
   }
@@ -274,7 +307,7 @@ static void *rt_BaseRate(void *args)
   iopl(3);
   rt_task_use_fpu(rt_BaseRateTask, 1);
 
-  NAME(MODEL,_init_blk)();
+  NAME(MODEL,_init)();
   grow_and_lock_stack(stackinc);
   if (UseHRT) {
     rt_make_hard_real_time();
@@ -296,13 +329,13 @@ static void *rt_BaseRate(void *args)
     RTTSKinit=rt_get_cpu_time_ns();
 #endif
 
-    NAME(MODEL,_rt_exec)(NAME(block_,MODEL),z, &TIME);
+    NAME(MODEL,_isr)(TIME);
 
   }
   if (UseHRT) {
     rt_make_soft_real_time();
   }
-  NAME(MODEL,_end)(NAME(block_,MODEL),z, &TIME);
+  NAME(MODEL,_end)();
   rt_task_delete(rt_BaseRateTask);
 
   return 0;
@@ -310,10 +343,10 @@ static void *rt_BaseRate(void *args)
 
 static inline void modify_any_param(int index, double param)
 {
-  if (index < NTOTRPAR1) {
+  if (index < NTOTRPAR) {
     rtModifyRParam(index, &param);
   } else {
-    rtModifyIParam(index -= NTOTRPAR1, (int)param);
+    rtModifyIParam(index -= NTOTRPAR, (int)param);
   }
 }
 
@@ -321,7 +354,8 @@ static void *rt_HostInterface(void *args)
 {
   RT_TASK *task;
   unsigned int Request;
-  int Reply, len;
+  int Reply;
+  long int len;
 
   if (!(rt_HostInterfaceTask = rt_task_init_schmod(nam2num(HostInterfaceTaskName), rt_HostInterfaceTaskPriority, 0, 0, SCHED_RR, 0xFF))) {
     fprintf(stderr,"Cannot init rt_HostInterfaceTask.\n");
@@ -345,29 +379,29 @@ static void *rt_HostInterface(void *args)
 	rtParam.nRows = 1;
 	rtParam.nCols = 1;
 
-	rt_return(task, (isRunning << 16) | ((NTOTRPAR1 + NTOTIPAR1) & 0xFFFF));
+	rt_return(task, (isRunning << 16) | ((NTOTRPAR + NTOTIPAR) & 0xFFFF));
 	rt_receivex(task, &Request, 1, &len);
 	rt_returnx(task, &rtParam, sizeof(rtParam));
 					  
-	for (i = 0; i < NRPAR1; i++) {
-	  sprintf(rtParam.blockName,"%s/%s",rtParam.modelName,strRPAR1[i]);
+	for (i = 0; i < NRPAR; i++) {
+	  sprintf(rtParam.blockName,"%s/%s",rtParam.modelName,strRPAR[i]);
 	  if(i==0) Idx = 0;
-	  else     Idx += lenRPAR1[i-1];
-	  for(j=0;j<lenRPAR1[i];j++) {
+	  else     Idx += lenRPAR[i-1];
+	  for(j=0;j<lenRPAR[i];j++) {
 	    rt_receivex(task, &Request, 1, &len);
 	    sprintf(rtParam.paramName, "Value[%d]",j);
-	    rtParam.dataValue[0] = RPAR1[Idx+j];
+	    rtParam.dataValue[0] = RPAR[Idx+j];
 	    rt_returnx(task, &rtParam, sizeof(rtParam));
 	  }
 	}
-	for (i = 0; i < NIPAR1; i++) {
-	  sprintf(rtParam.blockName,"%s/%s",rtParam.modelName,strIPAR1[i]);
+	for (i = 0; i < NIPAR; i++) {
+	  sprintf(rtParam.blockName,"%s/%s",rtParam.modelName,strIPAR[i]);
 	  if(i==0) Idx = 0;
-	  else     Idx += lenIPAR1[i-1];
-	  for(j=0;j<lenIPAR1[i];j++) {
+	  else     Idx += lenIPAR[i-1];
+	  for(j=0;j<lenIPAR[i];j++) {
 	    rt_receivex(task, &Request, 1, &len);
 	    sprintf(rtParam.paramName, "Value[%d]",j);
-	    rtParam.dataValue[0] = IPAR1[Idx+j];
+	    rtParam.dataValue[0] = IPAR[Idx+j];
 	    rt_returnx(task, &rtParam, sizeof(rtParam));
 	  }
 	}
@@ -380,9 +414,13 @@ static void *rt_HostInterface(void *args)
 	  } else {
 	    rt_returnx(task, &rtaiScope[Idx].ntraces, sizeof(int));
 	    rt_receivex(task, &Idx, sizeof(int), &len);
-	    rt_returnx(task, rtaiScope[Idx].name, MAX_NAME_SIZE);
-	    rt_receivex(task, &Idx, sizeof(int), &len);
-	    samplingTime = get_tsamp();
+	    rt_returnx(task, rtaiScope[Idx].name, strlen(rtaiScope[Idx].name)+1); // return null terminated string
+	    while (1) {
+	      rt_receivex(task, &j, sizeof(int), &len);
+				if(j < 0) break;
+	      rt_returnx(task, rtaiScope[Idx].traceName[j], strlen(rtaiScope[Idx].traceName[j])+1); // return null terminated string
+	    }
+	    samplingTime = NAME(MODEL,_get_tsamp)();
 	    rt_returnx(task, &samplingTime, sizeof(float));
 	  }
 	}
@@ -398,7 +436,7 @@ static void *rt_HostInterface(void *args)
 	    rt_receivex(task, &Idx, sizeof(int), &len);
 	    rt_returnx(task, rtaiLogData[Idx].name, MAX_NAME_SIZE);
 	    rt_receivex(task, &Idx, sizeof(int), &len);
-	    samplingTime = get_tsamp();
+	    samplingTime = NAME(MODEL,_get_tsamp)();
 	    rt_returnx(task, &samplingTime, sizeof(float));
 	  }
 	}
@@ -414,7 +452,7 @@ static void *rt_HostInterface(void *args)
 	    rt_receivex(task, &Idx, sizeof(int), &len);
 	    rt_returnx(task, rtaiALogData[Idx].name, MAX_NAME_SIZE);
 	    rt_receivex(task, &Idx, sizeof(int), &len);
-	    samplingTime = get_tsamp();
+	    samplingTime = NAME(MODEL,_get_tsamp)();
 	    rt_returnx(task, &samplingTime, sizeof(float));
 	  }
 	}
@@ -428,7 +466,7 @@ static void *rt_HostInterface(void *args)
 	    rt_receivex(task, &Idx, sizeof(int), &len);
 	    rt_returnx(task, rtaiLed[Idx].name, MAX_NAME_SIZE);
 	    rt_receivex(task, &Idx, sizeof(int), &len);
-	    samplingTime = get_tsamp();
+	    samplingTime = NAME(MODEL,_get_tsamp)();
 	    rt_returnx(task, &samplingTime, sizeof(float));
 	  }
 	}
@@ -440,7 +478,7 @@ static void *rt_HostInterface(void *args)
 	  } else {
 	    rt_returnx(task, rtaiMeter[Idx].name, MAX_NAME_SIZE);
 	    rt_receivex(task, &Idx, sizeof(int), &len);
-	    samplingTime = get_tsamp();
+	    samplingTime = NAME(MODEL,_get_tsamp)();
 	    rt_returnx(task, &samplingTime, sizeof(float));
 	  }
 	}
@@ -452,7 +490,7 @@ static void *rt_HostInterface(void *args)
 	  } else {
 	    rt_returnx(task, "", MAX_NAME_SIZE);
 	    rt_receivex(task, &Idx, sizeof(int), &len);
-	    samplingTime = get_tsamp();
+	    samplingTime = NAME(MODEL,_get_tsamp)();
 	    rt_returnx(task, &samplingTime, sizeof(float));
 	  }
 	}
@@ -487,7 +525,7 @@ static void *rt_HostInterface(void *args)
 	break;			
       }
       case 'g': {
-	int i, j, Idx;
+	int i, j, Idx=0;
 	rtTargetParamInfo rtParam;
 
 	strncpyz(rtParam.modelName, STR(MODEL), MAX_NAME_SIZE);
@@ -497,25 +535,25 @@ static void *rt_HostInterface(void *args)
 	rtParam.nCols = 1;
 	rt_return(task, isRunning);
 
-	for (i = 0; i < NRPAR1; i++) {
-	  sprintf(rtParam.blockName,"%s/%s",rtParam.modelName,strRPAR1[i]);
+	for (i = 0; i < NRPAR; i++) {
+	  sprintf(rtParam.blockName,"%s/%s",rtParam.modelName,strRPAR[i]);
 	  if(i==0) Idx = 0;
-	  else     Idx += lenRPAR1[i-1];
-	  for(j=0;j<lenRPAR1[i];j++) {
+	  else     Idx += lenRPAR[i-1];
+	  for(j=0;j<lenRPAR[i];j++) {
 	    rt_receivex(task, &Request, 1, &len);
 	    sprintf(rtParam.paramName, "Value[%d]",j);
-	    rtParam.dataValue[0] = RPAR1[Idx+j];
+	    rtParam.dataValue[0] = RPAR[Idx+j];
 	    rt_returnx(task, &rtParam, sizeof(rtParam));
 	  }
 	}
-	for (i = 0; i < NIPAR1; i++) {
-	  sprintf(rtParam.blockName,"%s/%s",rtParam.modelName,strIPAR1[i]);
+	for (i = 0; i < NIPAR; i++) {
+	  sprintf(rtParam.blockName,"%s/%s",rtParam.modelName,strIPAR[i]);
 	  if(i==0) Idx = 0;
-	  else     Idx += lenIPAR1[i-1];
-	  for(j=0;j<lenIPAR1[i];j++) {
+	  else     Idx += lenIPAR[i-1];
+	  for(j=0;j<lenIPAR[i];j++) {
 	    rt_receivex(task, &Request, 1, &len);
 	    sprintf(rtParam.paramName, "Value[%d]",j);
-	    rtParam.dataValue[j] = IPAR1[Idx+j];
+	    rtParam.dataValue[0] = IPAR[Idx+j];
 	    rt_returnx(task, &rtParam, sizeof(rtParam));
 	  } 
 	}
@@ -564,9 +602,84 @@ static void *rt_HostInterface(void *args)
     return 0;
   }
 
+static int calculateParametersChecksum(void) {
+	int checksum = NIPAR ^ NRPAR ^ NTOTIPAR ^ NTOTRPAR;
+	int i;
+  for(i=0; i<NIPAR; i++) {
+    checksum ^= lenIPAR[i];
+  }	
+  for(i=0; i<NRPAR; i++) {
+    checksum ^= lenRPAR[i];
+  }
+  for(i=0; i<NTOTIPAR; i++) {
+    checksum ^= IPAR[i];
+  }
+	for(i=0; i<NTOTRPAR; i++) {
+    checksum ^= (int)(RPAR[i]*100);
+  }
+  return checksum;
+}
+
+static void loadParametersFromFile(char* filename) {
+  FILE *fd;
+  if((fd = fopen(filename, "r")) == NULL) {
+    fprintf(stderr,"Cannot open file %s, dropping load of parameters\n", filename);
+    return;
+  }
+  char buf[30];
+  if(fgets(buf, sizeof(buf), fd) == NULL) {
+    fprintf(stderr,"Unable to read checksum from file, dropping load of parameters\n");
+    fclose(fd);
+    return;
+  }
+  if(parChecksum != (int)strtol(buf, NULL, 10)) {
+    fprintf(stderr,"Checksum error, dropping load of parameters\n");
+    fclose(fd);
+    return;
+  }
+  int i;
+  for(i=0; i<NTOTIPAR; i++) {
+    if(fgets(buf, sizeof(buf), fd) == NULL) {
+      fprintf(stderr,"Error during loading IPAR\n");
+      fclose(fd);
+      return;
+    }
+    rtModifyIParam(i, (int)strtol(buf, NULL, 10));
+  }
+  for(i=0; i<NTOTRPAR; i++) {
+    if(fgets(buf, sizeof(buf), fd) == NULL) {
+      fprintf(stderr,"Error during loading RPAR\n");
+      fclose(fd);
+      return;
+    }
+    double d = strtod(buf, NULL);
+    rtModifyRParam(i, &d);
+  }
+  fclose(fd);
+  fprintf(stdout,"Parameters loaded from %s\n", filename);
+}
+
+static void saveParametersToFile(char* filename) {
+  FILE *fd;
+  if((fd = fopen(filename, "w")) == NULL) {
+    fprintf(stderr,"Cannot write to file %s, parameters will not be saved\n", filename);
+    return;
+  }
+  fprintf(fd, "%d\n", parChecksum);
+  int i;
+  for(i=0; i<NTOTIPAR; i++) {
+    fprintf(fd, "%d\n", IPAR[i]);
+  }
+  for(i=0; i<NTOTRPAR; i++) {
+    fprintf(fd, "%.15e\n", RPAR[i]);
+  }
+  fclose(fd);
+  fprintf(stdout,"Parameters saved to %s\n", filename);
+}
+
 static int rt_Main(int priority)
 {
-  SEM *hard_timers_cnt;
+  SEM *hard_timers_cnt = NULL;
   char name[7];
   RTIME rt_BaseTaskPeriod;
   struct timespec err_timeout;
@@ -586,6 +699,10 @@ static int rt_Main(int priority)
   sem_init(&err_sem, 0, 0);
 
   printf("TARGET STARTS.\n");
+  parChecksum = calculateParametersChecksum();
+  if(loadParFile != NULL) {
+    loadParametersFromFile(loadParFile);
+  }
   pthread_create(&rt_HostInterfaceThread, NULL, rt_HostInterface, NULL);
   err_timeout.tv_sec = (long int)(time(NULL)) + 1;
   err_timeout.tv_nsec = 0;
@@ -605,8 +722,13 @@ static int rt_Main(int priority)
     goto finish;
   }
 
-  rt_BaseTaskPeriod = (RTIME) (1e9*get_tsamp());
+  rt_BaseTaskPeriod = (RTIME) (1e9*(NAME(MODEL,_get_tsamp)()));
+  if (InternTimer < 2) {
+    // The model have not been forced to use it's internal timer, so ask the model which timer scheme to use
+    InternTimer = NAME(MODEL,_useInternTimer)();
+  }
   if (InternTimer) {
+    printf("Using internal timer\n");
     WaitTimingEvent = (void *)rt_task_wait_period;
     if (!(hard_timers_cnt = rt_get_adr(nam2num("HTMRCN")))) {
       if (!ClockTick) {
@@ -626,14 +748,15 @@ static int rt_Main(int priority)
     }
   }
   else {
-    WaitTimingEvent = (void *)DummyWait;
+    printf("Using external clock event\n");
+    WaitTimingEvent = (void *)rtextclk;
     SendTimingEvent = (void *)DummySend;
   }
 
   if (verbose) {
     printf("Model : %s .\n", STR(MODEL));
     printf("Executes on CPU map : %x.\n", CpuMap);
-    printf("Sampling time : %e (s).\n", get_tsamp());
+    printf("Sampling time : %e (s).\n", NAME(MODEL,_get_tsamp)());
   }
   {
     int msg;
@@ -674,6 +797,9 @@ static int rt_Main(int priority)
   }
 	
  finish:
+  if(saveParFile != NULL) {
+    saveParametersToFile(saveParFile);
+  }
   sem_destroy(&err_sem);
   rt_task_delete(rt_MainTask);
   printf("TARGET ENDS.\n");
@@ -695,9 +821,11 @@ struct option options[] = {
   { "idled",      1, 0, 'd' },
   { "idsynch",    1, 0, 'y' },
   { "cpumap",     1, 0, 'c' },
-  { "external",   0, 0, 'e' },
+  { "internal",   0, 0, 'I' },
   { "oneshot",    0, 0, 'o' },
-  { "stack",      1, 0, 'm' }
+  { "stack",      1, 0, 'm' },
+  { "loadPar",    1, 0, 'L' },
+  { "savePar",    1, 0, 'S' }
 };
 
 void print_usage(void)
@@ -736,12 +864,16 @@ void print_usage(void)
 	 "      set the synchronoscope mailboxes identifier (default RTY)\n"
 	 "  -c <cpumap>, --cpumap <cpumap>\n"
 	 "      (1 << cpunum) on which the RT-model runs (default: let RTAI choose)\n"
-	 "  -e, --external\n"
-	 "      RT-model timed by an external resume (default internal)\n"
+	 "  -I, --internal\n"
+	 "      force RT-model to use internal timer instead of an external resume\n"
 	 "  -o, --oneshot\n"
 	 "      the hard timer will run in oneshot mode (default periodic)\n"
 	 "  -m <stack>, --stack <stack>\n"
 	 "      set a guaranteed stack size extension (default 30000)\n"
+	 "  -L <filename>, --loadPar <filename>\n"
+	 "      load parameters from filename\n"
+	 "  -S <filename>, --savePar <filename>\n"
+	 "      save parameters on exit to filename\n"
 	 "\n")
 	,stderr);
   exit(0);
@@ -754,7 +886,7 @@ static void endme(int dummy)
   endex = 1;
 }
 
-void exit_on_error()
+void exit_on_error(void)
 {
   endme(0);
 }
@@ -768,7 +900,7 @@ int main(int argc, char *argv[])
   signal(SIGTERM, endme);
 
   do {
-    c = getopt_long(argc, argv, "euvVswop:f:m:n:i:l:a:t:d:y:c:", options, NULL);
+    c = getopt_long(argc, argv, "IuvVswop:f:m:n:i:l:a:t:d:y:c:L:S:", options, NULL);
     switch (c) {
     case 'c':
       if ((CpuMap = atoi(optarg)) <= 0) {
@@ -776,8 +908,8 @@ int main(int argc, char *argv[])
 	donotrun = 1;
       }
       break;
-    case 'e':
-      InternTimer = 0;
+    case 'I':
+      InternTimer = 2;
       break;
     case 'f':
       if (strstr(optarg, "inf")) {
@@ -838,6 +970,12 @@ int main(int argc, char *argv[])
       break;
     case 'w':
       WaitToStart = 1;
+      break;
+    case 'L':
+      loadParFile = strdup(optarg);
+      break;
+    case 'S':
+      saveParFile = strdup(optarg);
       break;
     default:
       if (c >= 0) {

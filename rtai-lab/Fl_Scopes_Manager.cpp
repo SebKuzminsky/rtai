@@ -3,6 +3,8 @@ COPYRIGHT (C) 2003  Lorenzo Dozio (dozio@aero.polimi.it)
 		    Roberto Bucher (roberto.bucher@supsi.ch)
 		    Peter Brier (pbrier@dds.nl)
 
+Modified August 2009 by Henrik Slotholt (rtai@slotholt.net)
+
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
 License as published by the Free Software Foundation; either
@@ -314,7 +316,7 @@ void Fl_Scopes_Manager::trace_flags(int n, int t, int flags)
 inline void Fl_Scopes_Manager::enter_trigger_mode_i(Fl_Choice *b, void *v)
 {
 	int modes[] = {tmRoll, tmOverwrite, tmTriggerCh1Pos, tmTriggerCh1Neg, tmHold};
-	int n = (int)v;
+	long n = (long)v;
 	int val = b->value();
 	Scope_Windows[n]->Plot->trigger_mode(modes[val]);
 	
@@ -333,12 +335,12 @@ inline void Fl_Scopes_Manager::enter_options_i(Fl_Menu_Button *b, void *v)
         int i;
  	
         for(i=0;i<b->children();i++) { // loop through all menu items, and add checked items to the value
-	  if( b->child(i)->value() ) val |= (int)b->child(i)->user_data();
+	  if( b->child(i)->value() ) val |= (int)(long)b->child(i)->user_data();
 	} 
 	if ( b->label() == "Options " ) { // callback is used for trace and scope flags, if there is a space after "Options" set trace flags
 	  Scope_Windows[idx->scope_idx]->Plot->trace_flags(idx->trace_idx, val); 
 	} else {
-	  Scope_Windows[(int)v]->Plot->scope_flags(val);
+	  Scope_Windows[(int)(long)v]->Plot->scope_flags(val);
 	}
 }
 
@@ -448,7 +450,7 @@ void Fl_Scopes_Manager::select_scope(Fl_Browser *b, void *v)
 
 inline void Fl_Scopes_Manager::show_scope_i(Fl_Check_Button *b, void *v)
 {
-	int n = (int)v;
+	long n = (long)v;
 	if (b->value()) {
 		Scopes[n].visible = true;
 		Scope_Pause[n]->activate();
@@ -468,7 +470,7 @@ void Fl_Scopes_Manager::show_scope(Fl_Check_Button *b, void *v)
 inline void Fl_Scopes_Manager::pause_scope_i(Fl_Button *b, void *v)
 {
 
-	int n = (int)v;
+	long n = (long)v;
 	if (b->value()) {
 		Scope_Windows[n]->Plot->pause(false);
 	} else {
@@ -483,7 +485,7 @@ void Fl_Scopes_Manager::pause_scope(Fl_Button *b, void *v)
 
 inline void Fl_Scopes_Manager::oneshot_scope_i(Fl_Check_Button *b, void *v)
 {
-	int n = (int)v;
+	long n = (long)v;
 	Scope_Windows[n]->Plot->oneshot(b->value() != 0);
         if ( b->value() ) 
   	  Scope_Pause[n]->activate();
@@ -499,7 +501,7 @@ void Fl_Scopes_Manager::oneshot_scope(Fl_Check_Button *b, void *v)
 
 inline void Fl_Scopes_Manager::select_grid_color_i(Fl_Button *bb, void *v)
 {
-	int n = (int)v;
+	long n = (long)v;
 	uchar r,g,b;
 	Fl_Color c;
 
@@ -519,7 +521,7 @@ void Fl_Scopes_Manager::select_grid_color(Fl_Button *bb, void *v)
 
 inline void Fl_Scopes_Manager::select_bg_color_i(Fl_Button *bb, void *v)
 {
-	int n = (int)v;
+	long n = (long)v;
 	uchar r,g,b;
 	Fl_Color c;
 
@@ -539,7 +541,7 @@ void Fl_Scopes_Manager::select_bg_color(Fl_Button *bb, void *v)
 
 inline void Fl_Scopes_Manager::enter_secdiv_i(Fl_Input_Browser *b, void *v)
 {
-	int n = (int)v;
+	long n = (long)v;
 	float val = (float)atof(b->value());
 
 	if (val > 0.) {
@@ -554,7 +556,7 @@ void Fl_Scopes_Manager::enter_secdiv(Fl_Input_Browser *b, void *v)
 
 inline void Fl_Scopes_Manager::select_save_i(Fl_Check_Button *b, void *v)
 {
-	int n = (int)v;
+	long n = (long)v;
 	if (b->value()) {
 		Save_Points[n]->activate();
 		Save_Time[n]->deactivate();
@@ -572,7 +574,7 @@ void Fl_Scopes_Manager::select_save(Fl_Check_Button *b, void *v)
 
 inline void Fl_Scopes_Manager::enable_saving_i(Fl_Light_Button *b, void *v)
 {
-	int n = (int)v;
+	long n = (long)v;
 	if (b->value()) {
 		if ((Save_File_Pointer[n] = fopen(Save_File[n]->value(), "a+")) == NULL) {
 			fl_alert("Error in opening file %s", Save_File[n]->value());
@@ -816,12 +818,10 @@ Fl_Scopes_Manager::Fl_Scopes_Manager(int x, int y, int width, int height, Fl_MDI
 		  
 
 		  for (int j = 0; j < Scopes[i].ntraces; j++) {
-			char buf[10];
 			s_idx_T *idx = new s_idx_T;
 			idx->scope_idx = i;
 			idx->trace_idx = j;
-			sprintf(buf, "Trace %d", j+1);
-		  	Trace_Page[i][j] = o->new_page(buf);
+		  	Trace_Page[i][j] = o->new_page(Scopes[i].traceName[j]);
 			Trace_Page[i][j]->label_color(FL_WHITE);
 			{ Fl_Check_Button *o = Trace_Show[i][j] = new Fl_Check_Button(10, 25, 100, 20, "Show/Hide");
 			  o->value(1);

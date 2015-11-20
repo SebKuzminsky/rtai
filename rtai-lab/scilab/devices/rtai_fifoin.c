@@ -17,34 +17,41 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
 */
 
 #include <machine.h>
-#include <scicos_block.h>
+#include <scicos_block4.h>
 #include <rtai_fifos.h>
 #include <stdio.h>
 
 static void init(scicos_block *block)
 {
+  double * y;
   int i;
   int ntraces=block->nout;
-  rtf_create(block->ipar[0],block->ipar[1]);
+  int sizeData = sizeof(float)*(block->nout);
+  int dim = block->ipar[1]/sizeData*sizeData;
+  rtf_create(block->ipar[0],dim);
   rtf_reset(block->ipar[0]);
-  for(i=0;i<ntraces;i++)
-    block->outptr[i][0]=0.0;
-
+  for(i=0;i<ntraces;i++) {
+    y = block->outptr[i];
+    y[0]=0.0;
+  }
 }
 
 static void inout(scicos_block *block)
 {
+  double *y;
   int ntraces=block->nout;
   int count;
   struct {
-    double u[ntraces]; 
+    float u[ntraces]; 
   } data;
   int i;
 
   count=rtf_get(block->ipar[0],&data,sizeof(data));
   if(count!=0) {
-    for(i=0;i<ntraces;i++)
-      block->outptr[i][0]=data.u[i];
+    for(i=0;i<ntraces;i++){
+      y = block->outptr[i];
+      y[0]=data.u[i];
+    }
   }
 }
 
@@ -59,9 +66,6 @@ static void end(scicos_block *block)
 void rt_fifoin(scicos_block *block,int flag)
 {
   if (flag==1){          /* set output */
-    inout(block);
-  }
-  if (flag==2){          /* get input */
     inout(block);
   }
   else if (flag==5){     /* termination */ 

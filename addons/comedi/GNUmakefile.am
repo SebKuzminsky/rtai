@@ -45,7 +45,7 @@ install-exec-local: rtai_comedi$(modext)
 lib_LIBRARIES    = libkcomedilxrt.a
 
 libkcomedilxrt_a_CFLAGS = \
-	@RTAI_USER_CFLAGS@ \
+	@RTAI_REAL_USER_CFLAGS@ \
 	-DCONFIG_RTAI_LXRT_INLINE=0 \
 	-D_GNU_SOURCE -D_REENTRANT \
 	-I$(top_srcdir)/base/include \
@@ -56,4 +56,4 @@ libkcomedilxrt_a_SOURCES = kcomedi.c
 
 libkcomedilxrt_a_AR = $(CROSS_COMPILE)ar cru
 
-EXTRA_DIST = Makefile.kbuild
+EXTRA_DIST = Makefile.kbuild patchlinuxcomedi

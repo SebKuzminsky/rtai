@@ -1,13 +1,13 @@
 all: install
 
-SCILAB_VERSION = 4.3
+SCILAB_VERSION = 4.4.1
 SCILAB_DIR = /usr/lib/scicoslab-gtk-$(SCILAB_VERSION)
 RTAIDIR = $(shell rtai-config --prefix)
 
 CONTRIBDIR = $(SCILAB_DIR)/contrib/RTAI
 MACRODIR   = $(CONTRIBDIR)/macros
 DEVICEDIR  = $(CONTRIBDIR)/routines
-TEMPLDIR   = $(CONTRIBDIR)/RT_templates
+TEMPLDIR   = $(SCILAB_DIR)/contrib/RT_templates
 
 DEVSRC = *.c *.h *.tmp Makefile
 MACROSRC = *.sci *.cosf *.sce
@@ -25,10 +25,9 @@ install:
 	cd RTAI/RT_templates; cp $(TEMPLSRC) $(TEMPLDIR)
 	cd RTAI; cp -dpR gif_icons $(MACRODIR)
 	cd ../devices; cp $(DEVSRC) $(DEVICEDIR)
-	cp ../devices/scicos_block4.h $(SCILAB_DIR)/routines/scicos
 	cd $(CONTRIBDIR); scicoslab -nw -f builder.sce
 	cd $(CONTRIBDIR)/routines; make install; rm *.o *.a
 
 user:
-	mkdir -p ~/.Scilab/$(SCILAB_VERSION)
-	cat scilab >> ~/.Scilab/$(SCILAB_VERSION)/.scilab
+	mkdir -p ~/.ScicosLab/$(SCILAB_VERSION)
+	cat scilab >> ~/.ScicosLab/$(SCILAB_VERSION)/.scilab

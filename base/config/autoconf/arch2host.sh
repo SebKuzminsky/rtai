@@ -16,6 +16,12 @@ ppc|powerpc)
 arm)
     echo arm-unknown-linux-gnu
     ;;
+m68knommu)
+    echo m68knommu-unknown-linux-gnu
+    ;;
+m68k)
+    echo m68k-unknown-linux-gnu
+    ;;
 "")
     # Shorthand not specified: return default value.
     echo $2

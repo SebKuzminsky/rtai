@@ -6,6 +6,10 @@ all: ../$$MODEL$$
 RTAIDIR = $(shell rtai-config --prefix)
 C_FLAGS = $(shell rtai-config --lxrt-cflags)
 SCIDIR = $$SCILAB_DIR$$
+COMEDIDIR = $(shell rtai-config --comedi-dir)
+ifneq ($(strip $(COMEDIDIR)),)
+COMEDILIB = -lcomedi
+endif 
 
 RM = rm -f
 FILES_TO_CLEAN = *.o ../$$MODEL$$
@@ -26,13 +30,13 @@ SCILIBS = \
 OTHERLIBS = 
 ULIBRARY = $(RTAIDIR)/lib/libsciblk.a $(RTAIDIR)/lib/liblxrt.a
 
-CFLAGS = $(CC_OPTIONS) -O2 -I$(SCIDIR)/../../include/scilab/core -I$(SCIDIR)/../../include/scilab/scicos_blocks  $(C_FLAGS) -DMODEL=$(MODEL) -DMODELN=$(MODEL).c
+CFLAGS = $(CC_OPTIONS) -O2 -I$(SCIDIR)/../../include/scilab/core -I$(SCIDIR)/../../include/scilab/scicos -I$(SCIDIR)/../../include/scilab/scicos_blocks  $(C_FLAGS) -DMODEL=$(MODEL) -DMODELN=$(MODEL).c
 
 rtmain.c: $(RTAIDIR)/share/rtai/scicos/rtmain.c $(MODEL).c
 	cp $< .
 
 ../$$MODEL$$: $(OBJSSTAN) $(ULIBRARY)
-	gcc -static -o $@  $(OBJSSTAN) $(SCILIBS) $(ULIBRARY) -lpthread -lm
+	gcc -static -o $@  $(OBJSSTAN) $(SCILIBS) $(ULIBRARY) -lpthread $(COMEDILIB) -lm -llapack -lblas  -L /usr/lib/atlas
 	@echo "### Created executable: $(MODEL) ###"
 
 clean::

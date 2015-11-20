@@ -81,7 +81,9 @@
 #include <linux/slab.h>
 #include <linux/interrupt.h>
 #include <asm/uaccess.h>
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0)
 #include <asm/system.h>
+#endif
 #include <asm/rtai_sched.h>
 #include <rtai_tasklets.h>
 #include <rtai_lxrt.h>
@@ -117,8 +119,9 @@ static struct rt_tasklet_struct timers_list[NUM_CPUS] =
 static struct rt_tasklet_struct tasklets_list =
 { &tasklets_list, &tasklets_list, };
 
-static spinlock_t timers_lock[NUM_CPUS] = { SPIN_LOCK_UNLOCKED, };
-static spinlock_t tasklets_lock = SPIN_LOCK_UNLOCKED;
+// static spinlock_t timers_lock[NUM_CPUS] = { SPIN_LOCK_UNLOCKED, };
+static spinlock_t timers_lock[NUM_CPUS] = { __SPIN_LOCK_UNLOCKED(timers_lock[0]), };
+static DEFINE_SPINLOCK(tasklets_lock);
 
 static struct rt_fun_entry rt_tasklet_fun[]  __attribute__ ((__unused__));
 
@@ -255,7 +258,7 @@ RTAI_SYSCALL_MODE int rt_insert_tasklet(struct rt_tasklet_struct *tasklet, int p
 		tasklet->task = 0;
 	} else {
 		(tasklet->task)->priority = priority;
-		rt_copy_to_user(tasklet->usptasklet, tasklet, sizeof(struct rt_tasklet_struct));
+		rt_copy_to_user(tasklet->usptasklet, tasklet, sizeof(struct rt_usp_tasklet_struct));
 	}
 // tasklet insertion tasklets_list
 	flags = rt_spin_lock_irqsave(&tasklets_lock);
@@ -279,7 +282,7 @@ RTAI_SYSCALL_MODE int rt_insert_tasklet(struct rt_tasklet_struct *tasklet, int p
 
 RTAI_SYSCALL_MODE void rt_remove_tasklet(struct rt_tasklet_struct *tasklet)
 {
-	if (tasklet->next != tasklet && tasklet->prev != tasklet) {
+	if (tasklet->next && tasklet->prev && tasklet->next != tasklet && tasklet->prev != tasklet) {
 		unsigned long flags;
 		flags = rt_spin_lock_irqsave(&tasklets_lock);
 		(tasklet->next)->prev = tasklet->prev;
@@ -364,7 +367,7 @@ RTAI_SYSCALL_MODE int rt_set_tasklet_handler(struct rt_tasklet_struct *tasklet, 
 	}
 	tasklet->handler = handler;
 	if (tasklet->task) {
-		rt_copy_to_user(tasklet->usptasklet, tasklet, sizeof(struct rt_tasklet_struct));
+		rt_copy_to_user(tasklet->usptasklet, tasklet, sizeof(struct rt_usp_tasklet_struct));
 	}
 	return 0;
 }
@@ -373,7 +376,7 @@ RTAI_SYSCALL_MODE void rt_set_tasklet_data(struct rt_tasklet_struct *tasklet, un
 {
 	tasklet->data = data;
 	if (tasklet->task) {
-		rt_copy_to_user(tasklet->usptasklet, tasklet, sizeof(struct rt_tasklet_struct));
+		rt_copy_to_user(tasklet->usptasklet, tasklet, sizeof(struct rt_usp_tasklet_struct));
 	}
 }
 
@@ -499,7 +502,7 @@ RTAI_SYSCALL_MODE int rt_insert_timer(struct rt_tasklet_struct *timer, int prior
 	} else {
 		timer->cpuid = cpuid = NUM_CPUS > 1 ? (timer->task)->runnable_on_cpus : 0;
 		(timer->task)->priority = priority;
-		rt_copy_to_user(timer->usptasklet, timer, sizeof(struct rt_tasklet_struct));
+		rt_copy_to_user(timer->usptasklet, timer, sizeof(struct rt_usp_tasklet_struct));
 	}
 // timer insertion in timers_list
 	flags = rt_spin_lock_irqsave(lock = &timers_lock[LIST_CPUID]);
@@ -533,7 +536,7 @@ RTAI_SYSCALL_MODE int rt_insert_timer(struct rt_tasklet_struct *timer, int prior
 
 RTAI_SYSCALL_MODE void rt_remove_timer(struct rt_tasklet_struct *timer)
 {
-	if (timer->next != timer && timer->prev != timer) {
+	if (timer->next && timer->prev && timer->next != timer && timer->prev != timer) {
 		spinlock_t *lock;
 		unsigned long flags;
 		flags = rt_spin_lock_irqsave(lock = &timers_lock[TIMER_CPUID]);
@@ -755,8 +758,9 @@ static void rt_timers_manager(long cpuid)
 struct rt_tasklet_struct *rt_init_tasklet(void)
 {
 	struct rt_tasklet_struct *tasklet;
-	tasklet = rt_malloc(sizeof(struct rt_tasklet_struct));
-	memset(tasklet, 0, sizeof(struct rt_tasklet_struct));
+	if ((tasklet = rt_malloc(sizeof(struct rt_tasklet_struct)))) {
+		memset(tasklet, 0, sizeof(struct rt_tasklet_struct));
+	}
 	return tasklet;
 }
 
@@ -764,16 +768,24 @@ RTAI_SYSCALL_MODE void rt_register_task(struct rt_tasklet_struct *tasklet, struc
 {
 	tasklet->task = task;
 	tasklet->usptasklet = usptasklet;
-	rt_copy_to_user(usptasklet, tasklet, sizeof(struct rt_tasklet_struct));
+	rt_copy_to_user(usptasklet, tasklet, sizeof(struct rt_usp_tasklet_struct));
 }
 
-RTAI_SYSCALL_MODE void rt_wait_tasklet_is_hard(struct rt_tasklet_struct *tasklet, long thread)
+RTAI_SYSCALL_MODE int rt_wait_tasklet_is_hard(struct rt_tasklet_struct *tasklet, long thread)
 {
+#define POLLS_PER_SEC 100
+	int i;
 	tasklet->thread = thread;
-	while (!tasklet->task || !((tasklet->task)->state & RT_SCHED_SUSPENDED)) {
-		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout(2);
+	for (i = 0; i < POLLS_PER_SEC/5; i++) {
+		if (!tasklet->task || !((tasklet->task)->state & RT_SCHED_SUSPENDED)) {
+			current->state = TASK_INTERRUPTIBLE;
+			schedule_timeout(HZ/POLLS_PER_SEC);
+		} else {
+			return 0;
+		}
 	}
+	return 1;
+#undef POLLS_PER_SEC
 }
 
 /**
@@ -797,7 +809,7 @@ RTAI_SYSCALL_MODE int rt_delete_tasklet(struct rt_tasklet_struct *tasklet)
 
 	rt_remove_tasklet(tasklet);
 	tasklet->handler = 0;
-	rt_copy_to_user(tasklet->usptasklet, tasklet, sizeof(struct rt_tasklet_struct));
+	rt_copy_to_user(tasklet->usptasklet, tasklet, sizeof(struct rt_usp_tasklet_struct));
 	rt_task_resume(tasklet->task);
 	thread = tasklet->thread;	
 	rt_free(tasklet);
@@ -812,7 +824,7 @@ RTAI_SYSCALL_MODE int rt_delete_tasklet(struct rt_tasklet_struct *tasklet)
 static int PosixTimers = POSIX_TIMERS;
 RTAI_MODULE_PARM(PosixTimers, int);
 
-static spinlock_t ptimer_lock = SPIN_LOCK_UNLOCKED;
+static DEFINE_SPINLOCK(ptimer_lock);
 static volatile int ptimer_index;
 struct ptimer_list { int t_indx, p_idx; struct ptimer_list *p_ptr; struct rt_tasklet_struct *timer;} *posix_timer;
 
@@ -934,7 +946,7 @@ RTAI_SYSCALL_MODE int rt_ptimer_delete(timer_t timer, long space)
 	rt_remove_tasklet(tasklet);	
 	if (space) {
 		tasklet->handler = 0;
-		rt_copy_to_user(tasklet->usptasklet, tasklet, sizeof(struct rt_tasklet_struct));
+		rt_copy_to_user(tasklet->usptasklet, tasklet, sizeof(struct rt_usp_tasklet_struct));
 		rt_task_resume(tasklet->task);
 		rtn = tasklet->thread;	
 	} 
@@ -961,7 +973,7 @@ int __rtai_tasklets_init(void)
 	if (init_ptimers()) {
 		return -ENOMEM;
 	}	
-	for (cpuid = 0; cpuid < NUM_CPUS; cpuid++) {
+	for (cpuid = 0; cpuid < num_online_cpus(); cpuid++) {
 		timers_lock[cpuid] = timers_lock[0];
 		timers_list[cpuid] = timers_list[0];
 		timers_list[cpuid].cpuid = cpuid;
@@ -978,7 +990,7 @@ void __rtai_tasklets_exit(void)
 	int cpuid;
  	reset_rt_fun_ext_index(rt_tasklet_fun, TASKLETS_IDX);
 	cleanup_ptimers();    
-	for (cpuid = 0; cpuid < NUM_CPUS; cpuid++) {
+	for (cpuid = 0; cpuid < num_online_cpus(); cpuid++) {
 		rt_task_delete(&timers_manager[cpuid]);
 	}
 	printk(KERN_INFO "RTAI[tasklets]: unloaded.\n");

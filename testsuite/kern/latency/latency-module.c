@@ -38,7 +38,7 @@ MODULE_AUTHOR("Paolo Mantegazza <mantegazza@aero.polimi.it>, Robert Schwebel <ro
  *	command line parameters
  */
 
-#if defined(CONFIG_UCLINUX) || defined(CONFIG_ARM)
+#if defined(CONFIG_UCLINUX) || defined(CONFIG_ARM) || defined(CONFIG_COLDFIRE)
 #define DEFAULT_PERIOD 1000000
 #else
 #define DEFAULT_PERIOD 100000
@@ -69,6 +69,8 @@ MODULE_PARM_DESC(timer_mode, "timer running mode: 0-oneshot, 1-periodic");
 #define TIMER_TO_CPU 3		// < 0  || > 1 to maintain a symmetric processed timer.
 #define RUNNABLE_ON_CPUS 3	// 1: on cpu 0 only, 2: on cpu 1 only, 3: on any;
 #define RUN_ON_CPUS (num_online_cpus() > 1 ? RUNNABLE_ON_CPUS : 1)
+
+#define ECHOSPEED 1
 
 /*
  *	Global Variables
@@ -106,8 +108,7 @@ static double dot(double *a, double *b, int n)
  */
 
 #ifdef CONFIG_PROC_FS
-static int proc_read(char *page, char **start, off_t off, 
-                     int count, int *eof, void *data)
+static int PROC_READ_FUN(proc_read)
 {
 	PROC_PRINT_VARS;
 	PROC_PRINT("\n## RTAI latency calibration tool ##\n");
@@ -196,20 +197,19 @@ fun(long thread)
  *      our periodical measurement task.  
  */
 
+PROC_READ_OPEN_OPS(rtai_kern_lat_fops, proc_read);
+
 static int
 __latency_init(void)
 {
+	static struct proc_dir_entry *proc_rtai_kern_lat;
 
 	/* XXX check option ranges here */
 
 	/* register a proc entry */
 #ifdef CONFIG_PROC_FS
-	create_proc_read_entry("rtai/latency_calibrate", /* name             */
-	                       0,			 /* default mode     */
-	                       NULL, 			 /* parent dir       */
-			       proc_read, 		 /* function         */
-			       NULL			 /* client data      */
-	);
+	proc_rtai_kern_lat = CREATE_PROC_ENTRY("kern_latency_calibrate", 0, rtai_proc_root, &rtai_kern_lat_fops);
+	SET_PROC_READ_ENTRY(proc_rtai_kern_lat, proc_read);
 #endif
 
 	rtf_create(DEBUG_FIFO, 16000);	/* create a fifo length: 16000 bytes */
@@ -243,7 +243,7 @@ __latency_init(void)
 		period_counts = nano2count(period);
 	}
 
-	loops = (1000000000*avrgtime)/period;
+	loops = ((1000000000*avrgtime)/period)/ECHOSPEED;
 
 	/* Calculate the start time for the task. */
 	/* We set this to "now plus 10 periods"   */
@@ -274,7 +274,7 @@ __latency_exit(void)
 
 	/* Remove proc dir entry */
 #ifdef CONFIG_PROC_FS
-	remove_proc_entry("rtai/latency_calibrate", NULL);
+	remove_proc_entry("kern_latency_calibrate", rtai_proc_root);
 #endif
 
 	/* Output some statistics about CPU usage */

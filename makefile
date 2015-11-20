@@ -1,6 +1,6 @@
 KCONFIG_DIR=./base/config/kconfig
-CC := gcc
-#CC := gcc -Wall -pedantic
+CC ?= gcc
+#CC ?= gcc -Wall -pedantic
 
 ifneq ($(MAKECMDGOALS),help)
 ifeq ($(srctree),)
@@ -19,7 +19,7 @@ endif
 endif
 build_alias := $(shell $(srctree)/base/config/autoconf/config.guess)
 host_alias := $(shell  $(srctree)/base/config/autoconf/arch2host.sh $(ARCH) $(build_alias))
-override ARCH := $(shell echo $(host_alias)|cut -f1 -d-|sed -e s/^i.86/i386/ -e s/^arm.*/arm/ -e s/^sa110/arm/ -e s/^powerpc/ppc/)
+override ARCH := $(shell echo $(host_alias)|cut -f1 -d-|sed -e s/^i.86/x86/ -e s/^x86_64/x86/ -e s/^arm.*/arm/ -e s/^sa110/arm/ -e s/^powerpc/ppc/)
 endif
 
 ifeq ($(MAKECMDGOALS),)
@@ -65,7 +65,7 @@ config.status: .rtai_config
 	$(srctree)/configure \
 	--build=$(build_alias) \
 	--host=$(host_alias) \
-	--with-kconfig-file=$< \
+	--with-kconfig-file=./$< \
 	--with-linux-dir=$(RTAI_LINUX_DIR) \
 	--prefix=$$CONFIG_RTAI_INSTALLDIR \
 	$$confopts ; \
@@ -130,7 +130,7 @@ clean distclean:
 	fi
 	@find . -name autom4te.cache | xargs rm -fr
 
-all %::
+all ::
 	@if test -r GNUmakefile ; then \
 	$(MAKE) -f GNUmakefile $@ ; else \
 	echo "*** Please configure RTAI first (running 'make help' in RTAI's toplevel dir might help)." ; \

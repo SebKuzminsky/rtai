@@ -17,18 +17,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA.
 */
 
 #include <machine.h>
-#include <scicos_block.h>
+#include <scicos_block4.h>
 #include <stdio.h>
 #include <rtai_fifos.h>
 
 static void init(scicos_block *block)
 {
-  rtf_create(block->ipar[0],block->ipar[1]);
+  int sizeData = sizeof(float)*(block->nin+1);
+  int dim = block->ipar[1]/sizeData*sizeData;
+  rtf_create(block->ipar[0],dim);
   rtf_reset(block->ipar[0]);
 }
 
 static void inout(scicos_block *block)
 {
+  double *u;
   int ntraces=block->nin;
   struct {
     float t;
@@ -38,7 +41,8 @@ static void inout(scicos_block *block)
 
   data.t=(float) get_scicos_time();
   for (i = 0; i < ntraces; i++) {
-    data.u[i] = (float) block->inptr[i][0];
+    u=block->inptr[i];
+    data.u[i] = (float) u[0];
   }
   rtf_put(block->ipar[0],&data, sizeof(data));
 }
@@ -54,9 +58,6 @@ static void end(scicos_block *block)
 void rt_fifoout(scicos_block *block,int flag)
 {
   if (flag==1){          /* set output */
-    inout(block);
-  }
-  if (flag==2){          /* get input */
     inout(block);
   }
   else if (flag==5){     /* termination */ 

@@ -18,7 +18,7 @@ function [x,y,typ] = rtai4_comedi_dataout(job,arg1,arg2)
     exprs=graphics.exprs;
     while %t do
       [ok,ch,name,comedi_range,aref,exprs]=..
-      getvalue('Set RTAI-COMEDI DATA block parameters',..
+      scicos_getvalue('Set RTAI-COMEDI DATA block parameters',..
       ['Channel:';
        'Device:';
        'Range:';
@@ -27,14 +27,14 @@ function [x,y,typ] = rtai4_comedi_dataout(job,arg1,arg2)
       if ~ok then break,end
       if exists('inport') then in=ones(inport,1), out=[], else in=1, out=[], end
       [model,graphics,ok]=check_io(model,graphics,in,out,1,[])
+      dev=str2code(name)
       if ok then
         graphics.exprs=exprs;
-        model.rpar=[];
         model.ipar=[ch;
                     comedi_range;
                     aref;
-                    length(name);
-                    ascii(name)'];
+                    dev(length(dev))];
+        model.rpar=[];
         model.dstate=[];
         x.graphics=graphics;x.model=model
         break
@@ -53,12 +53,11 @@ function [x,y,typ] = rtai4_comedi_dataout(job,arg1,arg2)
     model.ipar=[ch;
                 comedi_range;
                 aref;
-                length(name);
-                ascii(name)']
+                0]
     model.dstate=[];
     model.blocktype='d'
     model.dep_ut=[%t %f]
-    exprs=[sci2exp(ch),name,sci2exp(comedi_range),sci2exp(aref)]
+    exprs=[sci2exp(ch);name;sci2exp(comedi_range);sci2exp(aref)]
     gr_i=['xstringb(orig(1),orig(2),[''COMEDI D/A'';name+'' CH-''+string(ch)],sz(1),sz(2),''fill'');']
     x=standard_define([3 2],model,exprs,gr_i)
   end

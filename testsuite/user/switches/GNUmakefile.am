@@ -5,7 +5,7 @@ test_PROGRAMS = switches
 switches_SOURCES = switches.c
 
 switches_CPPFLAGS = \
-	@RTAI_USER_CFLAGS@ \
+	@RTAI_REAL_USER_CFLAGS@ \
 	-I$(top_srcdir)/base/include \
 	-I../../../base/include
 
@@ -17,7 +17,7 @@ install-data-local:
 	$(mkinstalldirs) $(DESTDIR)$(testdir)
 	$(INSTALL_DATA) $(srcdir)/runinfo $(DESTDIR)$(testdir)/.runinfo
 	@echo '#!/bin/sh' > $(DESTDIR)$(testdir)/run
-	@echo "\$${DESTDIR}$(prefix)/bin/rtai-load" >> $(DESTDIR)$(testdir)/run
+	@echo "\$${DESTDIR}$(bindir)/rtai-load" >> $(DESTDIR)$(testdir)/run
 	@chmod +x $(DESTDIR)$(testdir)/run
 
 run: all

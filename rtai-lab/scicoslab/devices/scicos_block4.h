@@ -1,5 +1,6 @@
 #ifndef __SCICOS_BLOCK4_H__
 #define __SCICOS_BLOCK4_H__
+#include <float.h>
 
 #ifdef __STDC__
 	#include <stdlib.h>
@@ -60,6 +61,9 @@ typedef struct {
    void **work;
    int nmode;
    int *mode;
+   double *alpha;
+   double *beta;
+
  } scicos_block;
 
 
@@ -100,11 +104,32 @@ typedef struct {
 */
 #define ReInitialization 6
 
+typedef enum { PHASE_MESHPOINT=0, PHASE_DISCRETE=1, PHASE_TRY_MFX=2 } PHASE_SIMULATOR;
+
+#define DoColdRestart(block)        (do_cold_restart()) 
+#define GetSimulationPhase(block)   (get_phase_simulation())
+#define GetScicosTime(block)        (get_scicos_time())
+#define GetFinalTime(block)         (get_final_time())
+#define GetBlockNum(block)          (get_block_number())
+#define SetBlockNum(block,val)      (set_block_number(val))
+#define GetBlockError(block)        (get_block_error())
+#define SetBlockError(block,val)    (set_block_error(val))
+#define StopSimulation(block,val)   (end_scicos_sim()) 
+#define IsHotReStart(block)         (what_is_hot())
+#define isinTryPhase(block)         ( GetSimulationPhase(block)==PHASE_TRY_MFX  )
+#define areModesFixed(block)        ( GetSimulationPhase(block)==PHASE_TRY_MFX )
+#define isatMeshPoint(block)        ( GetSimulationPhase(block)==PHASE_MESHPOINT )
+#define GetSQRU(block)              (sqrt(DBL_EPSILON))
+
 /* utility function for block declaration */
 void do_cold_restart();
+int what_is_hot();
 int get_phase_simulation();
+int get_fcaller_id();
 double get_scicos_time();
+double get_final_time();
 int get_block_number();
+void set_block_number(int);
 void set_block_error(int);
 int get_block_error(void);
 void end_scicos_sim();
@@ -117,6 +142,8 @@ double Get_Jacobian_cj(void);
 double Get_Jacobian_ci(void);
 double Get_Scicos_SQUR(void);
 void Set_Jacobian_flag(int flag);
+
+#define SetAjac(blk,n) (Set_Jacobian_flag( n))
 
 int Convert_number (char *, double *);
 void homotopy(double *);
@@ -156,6 +183,7 @@ extern int s_cmp();
 #define SCSUINT8_N 811
 #define SCSUINT16_N 812
 #define SCSUINT32_N 814
+#define SCSBOOL_N 84
 #define SCSUNKNOW_N -1
 
 /* Define scicos simulator data type C operators (_COP) */
@@ -164,11 +192,12 @@ extern int s_cmp();
 #define SCSINT_COP int
 #define SCSINT8_COP char
 #define SCSINT16_COP short
-#define SCSINT32_COP long
+#define SCSINT32_COP int
 #define SCSUINT_COP unsigned int
 #define SCSUINT8_COP unsigned char
 #define SCSUINT16_COP unsigned short
-#define SCSUINT32_COP unsigned long
+#define SCSUINT32_COP unsigned int
+#define SCSBOOL_COP int
 #define SCSUNKNOW_COP double
 
  /* scicos_block macros definition :
@@ -256,6 +285,9 @@ extern int s_cmp();
   * 76 - GetNmode(blk)
   * 77 - GetModePtrs(blk)
   * 78 - GetLabelPtrs(blk)
+  * 79 - GetBoolInPortPtrs(blk,x)
+  * 80 - GetBoolOutPortPtrs(blk,x)
+  * 81 - GetPtrWorkPtrs(blk) 
   */
 
 /**
@@ -276,6 +308,10 @@ extern int s_cmp();
 /**
    \brief Get regular output port pointer of port number x.
 */
+
+#define GetOutPtrs(blk) (blk->outptr)
+#define GetInPtrs(blk) (blk->inptr)
+
 #define GetOutPortPtrs(blk,x) ((((x)>0)&((x)<=(blk->nout))) ? (blk->outptr[x-1]) : NULL)
 
 /**
@@ -439,6 +475,7 @@ extern int s_cmp();
 */
 #define GetWorkPtrs(blk) (*(blk->work))
 
+
 /**
    \brief Get number of continuous state.
 */
@@ -463,6 +500,10 @@ extern int s_cmp();
    \brief Get pointer of continuous state properties register.
 */
 #define GetXpropPtrs(blk) (blk->xprop)
+#define GetXpropPtrs(blk) (blk->xprop)
+#define GetAlphaPt(blk)  (blk->alpha)
+#define GetBetaPt(blk)  (blk->beta)
+
 
 /**
    \brief Get number of discrete state.
@@ -690,6 +731,21 @@ extern int s_cmp();
 */
 #define GetLabelPtrs(blk) (blk->label)
 
+/**
+   \brief Get pointer of boolean typed regular input port number x.
+*/
+#define GetBoolInPortPtrs(blk,x) Getint32InPortPtrs(blk,x)
+
+/**
+   \brief Get pointer of boolean typed regular output port number x.
+*/
+#define GetBoolOutPortPtrs(blk,x) Getint32OutPortPtrs(blk,x)
+
+/**
+   \brief Get the pointer of pointer of the Work array.
+*/
+#define GetPtrWorkPtrs(blk) (blk->work)
+
 #if WIN32
 #ifdef min
 #undef min
@@ -705,6 +761,8 @@ extern int s_cmp();
 #ifndef min
 #define min(a,b) ((a) <= (b) ? (a) : (b))
 #endif
+
+
 
 
 #endif /* __SCICOS_BLOCK_H__ */

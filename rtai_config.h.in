@@ -81,6 +81,9 @@
 /* Kconfig */
 #undef CONFIG_RTAI_HAL_PREEMPT
 
+/* Kconfig */
+#undef CONFIG_RTAI_HARD_SOFT_TOGGLER
+
 /* Host system alias */
 #undef CONFIG_RTAI_HOST_STRING
 
@@ -98,6 +101,9 @@
 
 /* Use RTAI Adeos-newgen HAL */
 #undef CONFIG_RTAI_IPIPE
+
+/* Kconfig */
+#undef CONFIG_RTAI_KERN_BUSY_ALIGN_RET_DELAY
 
 /* Kconfig */
 #undef CONFIG_RTAI_KSTACK_HEAPSZ
@@ -166,6 +172,12 @@
 #undef CONFIG_RTAI_MATH_C99
 
 /* Kconfig */
+#undef CONFIG_RTAI_MATH_KCOMPLEX
+
+/* Kconfig */
+#undef CONFIG_RTAI_MATH_LIBM_TO_USE
+
+/* Kconfig */
 #undef CONFIG_RTAI_MBX
 
 /* Kconfig */
@@ -214,7 +226,16 @@
 #undef CONFIG_RTAI_RTDM_FD_MAX
 
 /* Kconfig */
+#undef CONFIG_RTAI_RTDM_SELECT
+
+/* Kconfig */
 #undef CONFIG_RTAI_RTDM_SHIRQ
+
+/* Kconfig */
+#undef CONFIG_RTAI_RT_POLL
+
+/* Kconfig */
+#undef CONFIG_RTAI_RT_POLL_ON_STACK
 
 /* Kconfig */
 #undef CONFIG_RTAI_SCHED_8254_LATENCY
@@ -258,8 +279,20 @@
 /* Kconfig */
 #undef CONFIG_RTAI_TRACE
 
+/* Use TSC in user space */
+#undef CONFIG_RTAI_TSC
+
 /* Kconfig */
 #undef CONFIG_RTAI_TUNE_TSC_SYNC
+
+/* Kconfig */
+#undef CONFIG_RTAI_USER_BUSY_ALIGN_RET_DELAY
+
+/* Kconfig */
+#undef CONFIG_RTAI_USE_COMEDI_LOCK
+
+/* Kconfig */
+#undef CONFIG_RTAI_USE_LINUX_COMEDI
 
 /* Kconfig */
 #undef CONFIG_RTAI_USE_NEWERR
@@ -314,6 +347,10 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
+/* Define to the sub-directory in which libtool stores uninstalled libraries.
+   */
+#undef LT_OBJDIR
+
 /* Name of package */
 #undef PACKAGE
 
@@ -328,6 +365,9 @@
 
 /* Define to the one symbol short name of this package. */
 #undef PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#undef PACKAGE_URL
 
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION

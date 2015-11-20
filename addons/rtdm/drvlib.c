@@ -2,9 +2,9 @@
  * @file
  * Real-Time Driver Model for RTAI, driver library
  *
- * @note Copyright (C) 2005 Jan Kiszka <jan.kiszka@web.de>
+ * @note Copyright (C) 2005-2007 Jan Kiszka <jan.kiszka@web.de>
  * @note Copyright (C) 2005 Joerg Langenberg <joerg.langenberg@gmx.net>
- * @note Copyright (C) 2005 Paolo Mantegazza <mantegazza@aero.polimi.it>
+ * @note Copyright (C) 2008 Gilles Chanteperdrix <gilles.chanteperdrix@gmail.com>
  *
  * with adaptions for RTAI by Paolo Mantegazza <mantegazza@aero.polimi.it>
  *
@@ -32,6 +32,7 @@
  * this interface in order to remain portable.
  */
 
+#include <linux/bitops.h>
 #include <asm/page.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
@@ -136,11 +137,12 @@ nanosecs_abs_t rtdm_clock_read_monotonic(void);
  *
  * Rescheduling: possible.
  */
-int rtdm_task_init(rtdm_task_t *task, const char *name,
-		   rtdm_task_proc_t task_proc, void *arg,
-		   int priority, nanosecs_rel_t period)
+int rtdm_task_init_cpuid(rtdm_task_t *task, const char *name,
+			 rtdm_task_proc_t task_proc, void *arg,
+			 int priority, nanosecs_rel_t period, int cpuid)
 {
-	if (rt_task_init(task, (void *)task_proc, (long)arg, PAGE_SIZE, priority, 0, 0)) {
+	char *lname;
+	if (rt_task_init_cpuid(task, (void *)task_proc, (long)arg, PAGE_SIZE, priority, 0, 0, cpuid)) {
         	return -ENOMEM;
 	}
 	if (period > 0) {
@@ -148,6 +150,8 @@ int rtdm_task_init(rtdm_task_t *task, const char *name,
 	} else {
 		rt_task_resume(task);
 	}
+	lname = (char *)((unsigned long)name + strlen(name) - 6);
+	rt_register(nam2num(lname > name ? lname : name), task, IS_TASK, 0);
 	return 0;
 }
 
@@ -161,12 +165,7 @@ int rtdm_task_init(rtdm_task_t *task, const char *name,
 
 
 
-
-
-
-
-
-EXPORT_SYMBOL(rtdm_task_init);
+EXPORT_SYMBOL(rtdm_task_init_cpuid);
 
 #ifdef DOXYGEN_CPP /* Only used for doxygen doc generation */
 /**
@@ -408,12 +407,15 @@ void rtdm_task_join_nrt(rtdm_task_t *task, unsigned int poll_delay)
 {
 #define JOIN_TIMEOUT 1000 // in millisecs
 	int t;
+
+
+	trace_mark(xn_rtdm, task_joinnrt, "thread %p poll_delay %u",
+		   task, poll_delay);
+
 	for (t = 0; task->magic && t < JOIN_TIMEOUT; t += poll_delay) {
 		msleep(poll_delay);
 	}
-	if (task->magic) {
-		rt_task_delete(task);
-	}
+	rtdm_task_destroy(task);
 }
 
 
@@ -447,10 +449,9 @@ EXPORT_SYMBOL(rtdm_task_join_nrt);
  */
 void rtdm_task_busy_sleep(nanosecs_rel_t delay)
 {
-
-
-
-	rt_busy_sleep(delay);
+        xnticks_t wakeup = rtai_rdtsc() + llimd(delay, tuned.cpu_freq, 1000000000);
+        while ((xnticks_t)(rtai_rdtsc() - wakeup) < 0)
+                cpu_relax();
 }
 
 EXPORT_SYMBOL(rtdm_task_busy_sleep);
@@ -546,10 +547,10 @@ int rtdm_timer_start(rtdm_timer_t *timer, nanosecs_abs_t expiry,
 	int err;
 
 
-
 	err = xntimer_start(timer, xntbase_ns2ticks(rtdm_tbase, expiry),
 			    xntbase_ns2ticks(rtdm_tbase, interval),
 			    (xntmode_t)mode);
+
 
 	return err;
 }
@@ -633,7 +634,7 @@ void rtdm_timer_stop_in_handler(rtdm_timer_t *timer);
 
 static inline int _sem_wait(void *sem)
 {
-	if (rt_sem_wait(sem) < SEM_TIMOUT) {
+	if (rt_sem_wait(sem) < RTE_LOWERR) {
 		return 0;
 	}
 	return _rt_whoami()->unblocked ? -EINTR : -EIDRM;
@@ -653,7 +654,7 @@ static inline int _sem_wait_timed(void *sem, nanosecs_rel_t timeout, rtdm_toseq_
 		/* timeout sequence, i.e. abs timeout, or relative timeout */
 		ret = timeout_seq ? rt_sem_wait_until(sem, *timeout_seq) : rt_sem_wait_timed(sem, nano2count(timeout)); 
 	}
-	if (ret < SEM_TIMOUT) {
+	if (ret < RTE_LOWERR) {
 		return 0;
 	}
 	if (ret == SEM_TIMOUT) {
@@ -781,16 +782,20 @@ EXPORT_SYMBOL(rtdm_toseq_init);
  */
 void rtdm_event_init(rtdm_event_t *event, unsigned long pending)
 {
+	spl_t s;
+
+	trace_mark(xn_rtdm, event_init,
+		   "event %p pending %lu", event, pending);
 
 
 
-
-
-
-
-
-	event->pending = pending;
+	if (pending)
+		event->pending = pending;
 	rt_typed_sem_init(&event->synch_base, 0, BIN_SEM | PRIO_Q);
+	xnlock_get_irqsave(&nklock, s);
+	xnselect_init(&event->select_block);
+
+	xnlock_put_irqrestore(&nklock, s);
 }
 
 EXPORT_SYMBOL(rtdm_event_init);
@@ -861,13 +866,20 @@ void rtdm_event_signal(rtdm_event_t *event)
 	unsigned long flags;
 
 
-
+	trace_mark(xn_rtdm, event_signal, "event %p", event);
 
 	flags = rt_global_save_flags_and_cli();
 	__set_bit(0, &event->pending);
 	rt_sem_broadcast(&event->synch_base);
 	rt_global_restore_flags(flags);
+	SELECT_SIGNAL(&event->select_block, 1);
 }
+
+
+
+
+
+
 
 EXPORT_SYMBOL(rtdm_event_signal);
 
@@ -944,6 +956,9 @@ EXPORT_SYMBOL(rtdm_event_wait);
  * - -EPERM @e may be returned if an illegal invocation environment is
  * detected.
  *
+ * - -EWOULDBLOCK is returned if a negative @a timeout (i.e., non-blocking
+ * operation) has been specified.
+ *
  * Environments:
  *
  * This service can be called from:
@@ -959,22 +974,30 @@ int rtdm_event_timedwait(rtdm_event_t *event, nanosecs_rel_t timeout,
 	unsigned long flags;
 	int ret;
 
+
+
+
+	trace_mark(xn_rtdm, event_timedwait,
+		   "event %p timeout %Lu timeout_seq %p timeout_seq_value %Lu",
+		   event, (long long)timeout, timeout_seq, (long long)(timeout_seq ? *timeout_seq : 0));
+
 	flags = rt_global_save_flags_and_cli();
 	if (!__test_and_clear_bit(0, &event->pending)) {
 		if (!(ret = _sem_wait_timed(&event->synch_base, timeout, timeout_seq))) {
 			__clear_bit(0, &event->pending);
+			rt_global_restore_flags(flags);
+			SELECT_SIGNAL(&event->select_block, 0);
+		} else {
+			rt_global_restore_flags(flags);
 		}
 	} else {
+		rt_global_restore_flags(flags);
+		SELECT_SIGNAL(&event->select_block, 0);
 		ret = 0;
 	}
-	rt_global_restore_flags(flags);
 
 	return ret;
 }
-
-
-
-
 
 
 
@@ -1028,14 +1051,75 @@ void rtdm_event_clear(rtdm_event_t *event)
 {
 
 
-
-
+	trace_mark(xn_rtdm, event_clear, "event %p", event);
 
 
 	event->pending = 0;
+	SELECT_SIGNAL(&event->select_block, 0);
 }
 
+
+
+
 EXPORT_SYMBOL(rtdm_event_clear);
+
+#ifdef CONFIG_RTAI_RTDM_SELECT
+/**
+ * @brief Bind a selector to an event
+ *
+ * This functions binds the given selector to an event so that the former is
+ * notified when the event state changes. Typically the select binding handler
+ * will invoke this service.
+ *
+ * @param[in,out] event Event handle as returned by rtdm_event_init()
+ * @param[in,out] selector Selector as passed to the select binding handler
+ * @param[in] type Type of the bound event as passed to the select binding handler
+ * @param[in] fd_index File descriptor index as passed to the select binding
+ * handler
+ *
+ * @return 0 on success, otherwise:
+ *
+ * - -ENOMEM is returned if there is insufficient memory to establish the
+ * dynamic binding.
+ *
+ * - -EINVAL is returned if @a type or @a fd_index are invalid.
+ *
+ * Environments:
+ *
+ * This service can be called from:
+ *
+ * - Kernel module initialization/cleanup code
+ * - Kernel-based task
+ * - User-space task (RT, non-RT)
+ *
+ * Rescheduling: never.
+ */
+int rtdm_event_select_bind(rtdm_event_t *event, rtdm_selector_t *selector,
+			   enum rtdm_selecttype type, unsigned fd_index)
+{
+	struct xnselect_binding *binding;
+	int err;
+	spl_t s;
+
+	binding = xnmalloc(sizeof(*binding));
+	if (!binding)
+		return -ENOMEM;
+
+	xnlock_get_irqsave(&nklock, s);
+	err = xnselect_bind(&event->select_block,
+			    binding, selector, type, fd_index,
+			    event->pending || 
+			    event->synch_base.magic != RT_SEM_MAGIC);
+
+	xnlock_put_irqrestore(&nklock, s);
+
+	if (err)
+		xnfree(binding);
+
+	return err;
+}
+EXPORT_SYMBOL(rtdm_event_select_bind);
+#endif /* CONFIG_RTAI_RTDM_SELECT */
 /** @} */
 
 /*!
@@ -1061,15 +1145,18 @@ EXPORT_SYMBOL(rtdm_event_clear);
  */
 void rtdm_sem_init(rtdm_sem_t *sem, unsigned long value)
 {
+	spl_t s;
+
+	trace_mark(xn_rtdm, sem_init, "sem %p value %lu", sem, value);
 
 
 
 
+	rt_typed_sem_init(&sem->sem, value, CNT_SEM | PRIO_Q);
 
-
-
-
-	rt_typed_sem_init(sem, value, CNT_SEM | PRIO_Q);
+	xnlock_get_irqsave(&nklock, s);
+	xnselect_init(&sem->select_block);
+	xnlock_put_irqrestore(&nklock, s);
 }
 
 EXPORT_SYMBOL(rtdm_sem_init);
@@ -1122,7 +1209,7 @@ void rtdm_sem_destroy(rtdm_sem_t *sem);
  */
 int rtdm_sem_down(rtdm_sem_t *sem)
 {
-	return _sem_wait(sem);
+	return _sem_wait(&sem->sem);
 }
 
 EXPORT_SYMBOL(rtdm_sem_down);
@@ -1169,6 +1256,14 @@ int rtdm_sem_timeddown(rtdm_sem_t *sem, nanosecs_rel_t timeout,
 		       rtdm_toseq_t *timeout_seq)
 {
 
+	int retval;
+
+
+
+
+	trace_mark(xn_rtdm, sem_timedwait,
+		   "sem %p timeout %Lu timeout_seq %p timeout_seq_value %Lu",
+		   sem, (long long)timeout, timeout_seq, (long long)(timeout_seq ? *timeout_seq : 0));
 
 
 
@@ -1203,13 +1298,10 @@ int rtdm_sem_timeddown(rtdm_sem_t *sem, nanosecs_rel_t timeout,
 
 
 
-
-
-
-
-
-
-	return _sem_wait_timed(sem, timeout, timeout_seq);
+	if ((retval = _sem_wait_timed(&sem->sem, timeout, timeout_seq)) == 1) {	
+		SELECT_SIGNAL(&sem->select_block, 0);
+	}
+	return retval;
 }
 
 EXPORT_SYMBOL(rtdm_sem_timeddown);
@@ -1237,17 +1329,79 @@ void rtdm_sem_up(rtdm_sem_t *sem)
 {
 
 
+	trace_mark(xn_rtdm, sem_up, "sem %p", sem);
 
 
-
-
-
-
-
-	rt_sem_signal(sem);
+	rt_sem_signal(&sem->sem);
+	if (sem->sem.count > 0) {
+		SELECT_SIGNAL(&sem->select_block, 1);
+	}
 }
 
+
+
+
+
+
 EXPORT_SYMBOL(rtdm_sem_up);
+
+#ifdef CONFIG_RTAI_RTDM_SELECT
+/**
+ * @brief Bind a selector to a semaphore
+ *
+ * This functions binds the given selector to the semaphore so that the former
+ * is notified when the semaphore state changes. Typically the select binding
+ * handler will invoke this service.
+ *
+ * @param[in,out] sem Semaphore handle as returned by rtdm_sem_init()
+ * @param[in,out] selector Selector as passed to the select binding handler
+ * @param[in] type Type of the bound event as passed to the select binding handler
+ * @param[in] fd_index File descriptor index as passed to the select binding
+ * handler
+ *
+ * @return 0 on success, otherwise:
+ *
+ * - -ENOMEM is returned if there is insufficient memory to establish the
+ * dynamic binding.
+ *
+ * - -EINVAL is returned if @a type or @a fd_index are invalid.
+ *
+ * Environments:
+ *
+ * This service can be called from:
+ *
+ * - Kernel module initialization/cleanup code
+ * - Kernel-based task
+ * - User-space task (RT, non-RT)
+ *
+ * Rescheduling: never.
+ */
+int rtdm_sem_select_bind(rtdm_sem_t *sem, rtdm_selector_t *selector,
+			 enum rtdm_selecttype type, unsigned fd_index)
+{
+	struct xnselect_binding *binding;
+	int err;
+	spl_t s;
+
+	binding = xnmalloc(sizeof(*binding));
+	if (!binding)
+		return -ENOMEM;
+
+	xnlock_get_irqsave(&nklock, s);
+	err = xnselect_bind(&sem->select_block, binding, selector,
+			    type, fd_index,
+			    sem->sem.count > 0 ||
+			    sem->sem.magic != RT_SEM_MAGIC);
+
+	xnlock_put_irqrestore(&nklock, s);
+
+	if (err)
+		xnfree(binding);
+
+	return err;
+}
+EXPORT_SYMBOL(rtdm_sem_select_bind);
+#endif /* CONFIG_RTAI_RTDM_SELECT */
 /** @} */
 
 /*!
@@ -1276,6 +1430,7 @@ EXPORT_SYMBOL(rtdm_sem_up);
  */
 void rtdm_mutex_init(rtdm_mutex_t *mutex)
 {
+
 
 
 
@@ -1395,6 +1550,13 @@ int rtdm_mutex_timedlock(rtdm_mutex_t *mutex, nanosecs_rel_t timeout,
 			 rtdm_toseq_t *timeout_seq)
 {
 	int retval;
+
+
+
+	trace_mark(xn_rtdm, mutex_timedlock,
+		   "mutex %p timeout %Lu timeout_seq %p timeout_seq_value %Lu",
+		   mutex, (long long)timeout, timeout_seq, (long long)(timeout_seq ? *timeout_seq : 0));
+
 	if (timeout_seq) {
 		while((retval = _sem_wait_timed(mutex, timeout, timeout_seq)) == -EINTR);
 	} else {
@@ -1403,9 +1565,6 @@ int rtdm_mutex_timedlock(rtdm_mutex_t *mutex, nanosecs_rel_t timeout,
 	}
 	return retval;
 }
-
-
-
 
 
 
@@ -1656,7 +1815,7 @@ void rtdm_nrtsig_pend(rtdm_nrtsig_t *nrt_sig);
 
 struct rtdm_mmap_data {
 	void *src_vaddr;
-	unsigned long src_paddr;
+	phys_addr_t src_paddr;
 	struct vm_operations_struct *vm_ops;
 	void *vm_private_data;
 };
@@ -1664,13 +1823,15 @@ struct rtdm_mmap_data {
 static int rtdm_mmap_buffer(struct file *filp, struct vm_area_struct *vma)
 {
 	struct rtdm_mmap_data *mmap_data = filp->private_data;
-	unsigned long vaddr, paddr, maddr, size;
+	unsigned long vaddr, maddr, size;
+	phys_addr_t paddr;
+	int ret;
 
 	vma->vm_ops = mmap_data->vm_ops;
 	vma->vm_private_data = mmap_data->vm_private_data;
 
 	vaddr = (unsigned long)mmap_data->src_vaddr;
-	paddr = (unsigned long)mmap_data->src_paddr;
+	paddr = mmap_data->src_paddr;
 	if (!paddr)
 		/* kmalloc memory */
 		paddr = virt_to_phys((void *)vaddr);
@@ -1694,11 +1855,21 @@ static int rtdm_mmap_buffer(struct file *filp, struct vm_area_struct *vma)
 			vaddr += PAGE_SIZE;
 			mapped_size += PAGE_SIZE;
 		}
-		return 0;
+		xnarch_fault_range(vma);
+		ret = 0;
 	} else
 #endif /* CONFIG_MMU */
-		return xnarch_remap_io_page_range(vma, maddr, paddr,
-						  size, PAGE_SHARED);
+	if (mmap_data->src_paddr)
+		ret = xnarch_remap_io_page_range(filp, vma, maddr, paddr,
+						 size, PAGE_SHARED);
+	else {
+		ret = xnarch_remap_kmem_page_range(vma, maddr, paddr,
+						   size, PAGE_SHARED);
+		if (!ret)
+			xnarch_fault_range(vma);
+	}
+
+	return ret;
 }
 
 static struct file_operations rtdm_mmap_fops = {
@@ -1727,7 +1898,9 @@ static int rtdm_do_mmap(rtdm_user_info_t *user_info,
 	filp->private_data = mmap_data;
 
 	down_write(&user_info->mm->mmap_sem);
-	user_ptr = (void *)do_mmap(filp, (unsigned long)*pptr, len, prot,
+//	user_ptr = (void *)do_mmap(filp, (unsigned long)*pptr, len, prot,
+//				   MAP_SHARED, 0);
+	user_ptr = (void *)vm_mmap(filp, (unsigned long)*pptr, len, prot,
 				   MAP_SHARED, 0);
 	up_write(&user_info->mm->mmap_sem);
 
@@ -1862,7 +2035,7 @@ EXPORT_SYMBOL(rtdm_mmap_to_user);
  * Rescheduling: possible.
  */
 int rtdm_iomap_to_user(rtdm_user_info_t *user_info,
-		       unsigned long src_addr, size_t len,
+		       phys_addr_t src_addr, size_t len,
 		       int prot, void **pptr,
 		       struct vm_operations_struct *vm_ops,
 		       void *vm_private_data)

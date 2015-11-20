@@ -38,7 +38,7 @@ efltk_cflags = $(shell @EFLTK_DIR@/bin/efltk-config --cxxflags)
 efltk_ldflags = $(shell @EFLTK_DIR@/bin/efltk-config --ldflags --use-gl --multithread)
 
 xrtailab_CPPFLAGS = \
-	@RTAI_USER_CFLAGS@ \
+	@RTAI_REAL_USER_CFLAGS@ \
 	-I$(top_srcdir)/base/include \
 	-I../base/include \
 	$(efltk_cflags) \
@@ -48,6 +48,6 @@ xrtailab_LDFLAGS = \
 	$(efltk_ldflags) \
 	@GL_LIBS@
 
-SUBDIRS = matlab matrixx scilab
+SUBDIRS = matlab matrixx scilab scicoslab
 
-EXTRA_DIST = icons INSTALL
+EXTRA_DIST = icons INSTALL scilab5 scicoslab README README.scilab README_X64

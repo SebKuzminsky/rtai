@@ -39,7 +39,7 @@ MODULE_LICENSE("GPL");
 
 #define SLOWMUL  24
 
-#if defined(CONFIG_UCLINUX) || defined(CONFIG_ARM)
+#if defined(CONFIG_UCLINUX) || defined(CONFIG_ARM) || defined(CONFIG_COLDFIRE)
 #define TICK_TIME 1000000
 #else
 #define TICK_TIME 100000
@@ -96,6 +96,7 @@ static void fun(long thread) {
 	int max_diff;
 	RTIME svt, t;
 
+	t = 0;
 	min_diff = 1000000000;
 	max_diff = -1000000000;
 	while (1) {

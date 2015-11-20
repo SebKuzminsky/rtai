@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2001-2006  Paolo Mantegazza <mantegazza@aero.polimi.it>,
+ * Copyright (C) 2001-2013  Paolo Mantegazza <mantegazza@aero.polimi.it>,
  *		            Pierre Cloutier <pcloutier@poseidoncontrols.com>,
  *		            Steve Papacharalambous <stevep@zentropix.com>.
  *
@@ -30,6 +30,8 @@ Nov. 2001, Jan Kiszka (Jan.Kiszka@web.de) fix a tiny bug in __task_init.
 #include <linux/slab.h>
 #include <linux/unistd.h>
 #include <linux/mman.h>
+#include <linux/sched.h>
+#include <linux/delay.h>
 #include <asm/uaccess.h>
 
 #include <rtai_sched.h>
@@ -46,7 +48,8 @@ Nov. 2001, Jan Kiszka (Jan.Kiszka@web.de) fix a tiny bug in __task_init.
 #include <rtai_schedcore.h>
 
 #define MAX_FUN_EXT  16
-static struct rt_fun_entry *rt_fun_ext[MAX_FUN_EXT];
+struct rt_fun_entry *rt_fun_ext[MAX_FUN_EXT];
+EXPORT_SYMBOL(rt_fun_ext);
 
 /* 
  * WATCH OUT for the default max expected size of messages from/to user space.
@@ -159,8 +162,10 @@ static inline void lxrt_fun_call_wbuf(RT_TASK *rt_task, void *fun, int narg, lon
 		}
 		if (rsize) {			
 			long *buf_arg = fun_args + USP_RBF1(type);
-			rt_copy_from_user(rt_task->msg_buf[0], (long *)buf_arg[0], rsize);
-			buf_arg[0] = (long)rt_task->msg_buf[0];
+			if (buf_arg[0]) {
+				rt_copy_from_user(rt_task->msg_buf[0], (long *)buf_arg[0], rsize);
+				buf_arg[0] = (long)rt_task->msg_buf[0];
+			}
 		}
 		if (wsize) {
 			long *buf_arg = fun_args + USP_WBF1(type);
@@ -176,8 +181,10 @@ static inline void lxrt_fun_call_wbuf(RT_TASK *rt_task, void *fun, int narg, lon
 		}
 		if (r2size) {
 			long *buf_arg = fun_args + USP_RBF2(type);
-			rt_copy_from_user(rt_task->msg_buf[1], (long *)buf_arg[0], r2size);
-			buf_arg[0] = (long)rt_task->msg_buf[1];
+			if (buf_arg[0]) {
+				rt_copy_from_user(rt_task->msg_buf[1], (long *)buf_arg[0], r2size);
+				buf_arg[0] = (long)rt_task->msg_buf[1];
+       			}
        		}
 		if (w2size) {
 			long *buf_arg = fun_args + USP_WBF2(type);
@@ -195,6 +202,7 @@ static inline void lxrt_fun_call_wbuf(RT_TASK *rt_task, void *fun, int narg, lon
 }
 
 void put_current_on_cpu(int cpuid);
+void rt_set_task_pid(RT_TASK *);
 
 static inline RT_TASK* __task_init(unsigned long name, int prio, int stack_size, int max_msg_size, int cpus_allowed)
 {
@@ -205,7 +213,7 @@ static inline RT_TASK* __task_init(unsigned long name, int prio, int stack_size,
 		if (num_online_cpus() > 1 && cpus_allowed) {
 	    		cpus_allowed = hweight32(cpus_allowed) > 1 ? get_min_tasks_cpuid() : ffnz(cpus_allowed);
 		} else {
-			cpus_allowed = smp_processor_id();
+			cpus_allowed = rtai_cpuid();
 		}
 		put_current_on_cpu(cpus_allowed);
 		return rt_task;
@@ -230,9 +238,9 @@ static inline RT_TASK* __task_init(unsigned long name, int prio, int stack_size,
 	if (rt_task) {
 	    rt_task->magic = 0;
 	    if (num_online_cpus() > 1 && cpus_allowed) {
-	    cpus_allowed = hweight32(cpus_allowed) > 1 ? get_min_tasks_cpuid() : ffnz(cpus_allowed);
+			cpus_allowed = hweight32(cpus_allowed) > 1 ? get_min_tasks_cpuid() : ffnz(cpus_allowed);
 	    } else {
-	    cpus_allowed = smp_processor_id();
+			cpus_allowed = rtai_cpuid();
 	    }
 	    if (!set_rtext(rt_task, prio, 0, 0, cpus_allowed, 0)) {
 	        rt_task->fun_args = (long *)((struct fun_args *)(rt_task + 1));
@@ -242,14 +250,17 @@ static inline RT_TASK* __task_init(unsigned long name, int prio, int stack_size,
 		rt_task->max_msg_size[1] = max_msg_size;
 		if (rt_register(name, rt_task, IS_TASK, 0)) {
 			rt_task->state = 0;
-
-#ifdef PF_EVNOTIFY
+#ifdef __IPIPE_FEATURE_ENABLE_NOTIFIER
+			ipipe_enable_notifier(current);
+#else
 			current->flags |= PF_EVNOTIFY;
 #endif
-#ifdef VM_PINNED
+#if (defined VM_PINNED) && (defined CONFIG_MMU)
 			ipipe_disable_ondemand_mappings(current);
 #endif
+			RTAI_OOM_DISABLE();
 
+			rt_set_task_pid(rt_task);
 			return rt_task;
 		} else {
 			clr_rtext(rt_task);
@@ -264,12 +275,21 @@ static inline RT_TASK* __task_init(unsigned long name, int prio, int stack_size,
 
 static int __task_delete(RT_TASK *rt_task)
 {
-	struct task_struct *process;
-	if (rt_task->linux_syscall_server) {
-		rt_task_masked_unblock(rt_task->linux_syscall_server->task, ~RT_SCHED_READY);
+	struct task_struct *lnxtsk;
+	RT_TASK *server;
+
+	if (current != (lnxtsk = rt_task->lnxtsk)) {
+		return -EPERM;
 	}
-	if (current == rt_task->lnxtsk && rt_task->is_hard > 0) {
+	lnxtsk->rtai_tskext(TSKEXT0) = lnxtsk->rtai_tskext(TSKEXT1) = 0;
+	if (rt_task->is_hard > 0) {
 		give_back_to_linux(rt_task, 0);
+	}
+	if ((server = rt_task->linux_syscall_server)) {
+		server->suspdepth = -RTE_HIGERR;
+		rt_task_masked_unblock(server, ~RT_SCHED_READY);
+       		lnxtsk->state = TASK_INTERRUPTIBLE;
+	        schedule_timeout(HZ/10);
 	}
 	if (clr_rtext(rt_task)) {
 		return -EFAULT;
@@ -277,9 +297,6 @@ static int __task_delete(RT_TASK *rt_task)
 	rt_free(rt_task->msg_buf[0]);
 	rt_free(rt_task->msg_buf[1]);
 	rt_free(rt_task);
-	if ((process = rt_task->lnxtsk)) {
-		process->rtai_tskext(TSKEXT0) = process->rtai_tskext(TSKEXT1) = 0;
-	}
 	return (!rt_drg_on_adr(rt_task)) ? -ENODEV : 0;
 }
 
@@ -290,14 +307,52 @@ static int __task_delete(RT_TASK *rt_task)
 #define SYSW_DIAG_MSG(x)
 #endif
 
-#define recover_hardrt(chktsk, task) \
-do { \
-	if ((chktsk) && unlikely(((task)->is_hard) < 0)) { \
-		SYSW_DIAG_MSG(rt_printk("GOING BACK TO HARD (SYSLXRT, DIRECT), PID = %d.\n", current->pid);); \
-		steal_from_linux(task); \
-		SYSW_DIAG_MSG(rt_printk("GONE BACK TO HARD (SYSLXRT),  PID = %d.\n", current->pid);); \
-	} \
-} while(0)
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,28)
+
+#include <linux/cred.h>
+static inline void set_lxrt_perm(int perm)
+{
+	struct cred *cred;
+	if ((cred = prepare_creds())) {
+		cap_raise(cred->cap_effective, perm);
+		commit_creds(cred);
+	}
+}
+
+#else /* LINUX_VERSION_CODE <= 2.6.28 */
+
+static inline void set_lxrt_perm(int perm)
+{
+#ifdef current_cap
+	cap_raise(current_cap(), perm);
+#else
+	cap_raise(current->cap_effective, perm);
+#endif
+}
+
+#endif /* LINUX_VERSION_CODE > 2.6.28 */
+
+void rt_make_hard_real_time(RT_TASK *task)
+{
+	if (task && task->magic == RT_TASK_MAGIC && !task->is_hard) {
+		steal_from_linux(task);
+	}
+}
+EXPORT_SYMBOL(rt_make_hard_real_time);
+
+void rt_make_soft_real_time(RT_TASK *task)
+{
+	if (task && task->magic == RT_TASK_MAGIC && task->is_hard) {
+		if (task->is_hard > 0) {
+			give_back_to_linux(task, 0);
+		} else {
+			task->is_hard = 0;
+		}
+	}
+}
+EXPORT_SYMBOL(rt_make_soft_real_time);
+
+static long kernel_calibrator_spv(long period, long loops, RT_TASK *task);
 
 static inline long long handle_lxrt_request (unsigned int lxsrq, long *arg, RT_TASK *task)
 {
@@ -316,18 +371,16 @@ static inline long long handle_lxrt_request (unsigned int lxsrq, long *arg, RT_T
  * (giuseppe@renoldi.org).
  */
 		if (unlikely(!(funcm = rt_fun_ext[INDX(lxsrq)]))) {
-			rt_printk("BAD: null rt_fun_ext[%d]\n", INDX(lxsrq));
+			rt_printk("BAD: null rt_fun_ext, no module for extension %d?\n", INDX(lxsrq));
 			return -ENOSYS;
 		}
 		if (!(type = funcm[srq].type)) {
-			recover_hardrt(task, task);
 			return ((RTAI_SYSCALL_MODE long long (*)(unsigned long, ...))funcm[srq].fun)(RTAI_FUN_ARGS);
 		}
-		recover_hardrt(1, task);
 		if (unlikely(NEED_TO_RW(type))) {
-			lxrt_fun_call_wbuf(task, funcm[srq].fun, NARG(lxsrq), arg, type);
+			lxrt_fun_call_wbuf(task, funcm[srq].fun, LXRT_NARG(lxsrq), arg, type);
 		} else {
-			lxrt_fun_call(task, funcm[srq].fun, NARG(lxsrq), arg);
+			lxrt_fun_call(task, funcm[srq].fun, LXRT_NARG(lxsrq), arg);
 	        }
 		return task->retval;
 	}
@@ -463,6 +516,8 @@ static inline long long handle_lxrt_request (unsigned int lxsrq, long *arg, RT_T
 		}
 
 		case MAKE_HARD_RT: {
+			rt_make_hard_real_time(task);
+			return 0;
 			if (!task || task->is_hard) {
 				 return 0;
 			}
@@ -471,6 +526,8 @@ static inline long long handle_lxrt_request (unsigned int lxsrq, long *arg, RT_T
 		}
 
 		case MAKE_SOFT_RT: {
+			rt_make_soft_real_time(task);
+			return 0;
 			if (!task || !task->is_hard) {
 				return 0;
 			}
@@ -494,9 +551,15 @@ static inline long long handle_lxrt_request (unsigned int lxsrq, long *arg, RT_T
 		}
 
 		case NONROOT_HRT: {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,24)
 			current->cap_effective |= ((1 << CAP_IPC_LOCK)  |
-						   (1 << CAP_SYS_RAWIO) | 
+						   (1 << CAP_SYS_RAWIO) |
 						   (1 << CAP_SYS_NICE));
+#else
+			set_lxrt_perm(CAP_IPC_LOCK);
+			set_lxrt_perm(CAP_SYS_RAWIO);
+			set_lxrt_perm(CAP_SYS_NICE);
+#endif
 			return 0;
 		}
 
@@ -537,17 +600,21 @@ static inline long long handle_lxrt_request (unsigned int lxsrq, long *arg, RT_T
                         return 0;
                 }
 
-                case FORCE_TASK_SOFT: {
-			extern void rt_do_force_soft(RT_TASK *rt_task);
-                        struct task_struct *ltsk;
-                        if ((ltsk = find_task_by_pid(arg0.name)))  {
-                                if ((arg0.rt_task = ltsk->rtai_tskext(TSKEXT0))) {
-					if ((arg0.rt_task->force_soft = (arg0.rt_task->is_hard != 0) && FORCE_SOFT)) {
-						rt_do_force_soft(arg0.rt_task);
-					}
-					return arg0.ll;
-                                }
-                        }
+                case HARD_SOFT_TOGGLER: {
+			if (arg0.rt_task && arg0.rt_task->lnxtsk) {
+				return (arg0.rt_task->lnxtsk)->pid;
+			} 
+#ifdef CONFIG_RTAI_HARD_SOFT_TOGGLER
+			  else if (task) {
+				rtai_cli();
+				if (task->is_hard > 0) {
+					rt_make_soft_real_time(task); 
+				} else {
+					rt_make_hard_real_time(task);
+				}
+				rtai_sti();
+			}
+#endif
                         return 0;
                 }
 
@@ -560,7 +627,7 @@ static inline long long handle_lxrt_request (unsigned int lxsrq, long *arg, RT_T
 			if ((larg->task)->exectime[0] && (larg->task)->exectime[1]) {
 				larg->exectime[0] = (larg->task)->exectime[0]; 
 				larg->exectime[1] = (larg->task)->exectime[1]; 
-				larg->exectime[2] = rdtsc(); 
+				larg->exectime[2] = rtai_rdtsc(); 
 			}
                         return 0;
 		}
@@ -576,12 +643,54 @@ static inline long long handle_lxrt_request (unsigned int lxsrq, long *arg, RT_T
                         return 0;
 		}
 
-		case LINUX_SERVER_INIT: {
+		case LINUX_SERVER: {
 			struct arg { struct linux_syscalls_list syscalls; };
-			larg->syscalls.task->linux_syscall_server = larg->syscalls.serv;
-			rtai_set_linux_task_priority(current, (larg->syscalls.task)->lnxtsk->policy, (larg->syscalls.task)->lnxtsk->rt_priority);
-			arg0.rt_task = __task_init((unsigned long)larg->syscalls.task, larg->syscalls.task->base_priority >= BASE_SOFT_PRIORITY ? larg->syscalls.task->base_priority - BASE_SOFT_PRIORITY : larg->syscalls.task->base_priority, 0, 0, 1 << larg->syscalls.task->runnable_on_cpus);
-			return arg0.ll;
+			if (larg->syscalls.nr) {
+				if (larg->syscalls.task->linux_syscall_server) {
+					RT_TASK *serv;
+					rt_get_user(serv, &larg->syscalls.serv);
+					rt_task_masked_unblock(serv, ~RT_SCHED_READY);
+				}
+				larg->syscalls.task->linux_syscall_server = larg->syscalls.serv;
+				rtai_set_linux_task_priority(current, (larg->syscalls.task)->lnxtsk->policy, (larg->syscalls.task)->lnxtsk->rt_priority);
+				arg0.rt_task = __task_init((unsigned long)larg->syscalls.task, larg->syscalls.task->base_priority >= BASE_SOFT_PRIORITY ? larg->syscalls.task->base_priority - BASE_SOFT_PRIORITY : larg->syscalls.task->base_priority, 0, 0, 1 << larg->syscalls.task->runnable_on_cpus);
+
+				larg->syscalls.task->linux_syscall_server = arg0.rt_task;
+				arg0.rt_task->linux_syscall_server = larg->syscalls.serv;
+
+				return arg0.ll;
+			} else {
+				if (!larg->syscalls.task) {
+					larg->syscalls.task = RT_CURRENT;
+				}
+				if ((arg0.rt_task = larg->syscalls.task->linux_syscall_server)) {
+					larg->syscalls.task->linux_syscall_server = NULL;
+					arg0.rt_task->suspdepth = -RTE_HIGERR;
+					rt_task_masked_unblock(arg0.rt_task, ~RT_SCHED_READY);
+				}
+			}
+			return 0;
+		}
+
+		case KERNEL_CALIBRATOR: {
+			struct arg { long period, loops, Latency; };
+#if !CONFIG_RTAI_BUSY_TIME_ALIGN
+			extern int rt_smp_half_tick[];
+			int cpu;
+			tuned.latency = imuldiv(abs((int)larg->Latency), tuned.cpu_freq, 1000000000);
+			if (tuned.latency < tuned.setup_time_TIMER_CPUNIT) {
+				tuned.latency = tuned.setup_time_TIMER_CPUNIT;
+			}
+			for (cpu = 0; cpu < NR_RT_CPUS; cpu++) {
+				rt_smp_half_tick[cpu] = tuned.latency/2;
+			}
+#endif
+			return larg->Latency < 0 ? 0 : kernel_calibrator_spv(larg->period, larg->loops, task);
+		}
+
+		case GET_CPU_FREQ: {
+			extern struct calibration_data rtai_tunables;
+			return rtai_tunables.cpu_freq;
 		}
 
 	        default: {
@@ -593,105 +702,42 @@ static inline long long handle_lxrt_request (unsigned int lxsrq, long *arg, RT_T
 	return 0;
 }
 
-static inline void force_soft(RT_TASK *task)
+static inline void check_to_soften_harden(RT_TASK *task)
 {
 	if (unlikely(task->force_soft)) {
-		task->force_soft = 0;
-		task->usp_flags &= ~FORCE_SOFT;
-		give_back_to_linux(task, 0);
-	}
-}
-
-#if 1  // restructured 
-
-static inline void rt_do_signal(struct pt_regs *regs, RT_TASK *task)
-{
-	if (unlikely(task->unblocked)) {
 		if (task->is_hard > 0) {
-			give_back_to_linux(task, task->force_soft ? 0 : -1);
+			give_back_to_linux(task, 0);
+		} else {
+			task->is_hard = 0;
 		}
-#ifdef RTAI_DO_LINUX_SIGNAL
-		do {
-			unsigned long saved_eax = regs->LINUX_SYSCALL_RETREG;
-			regs->LINUX_SYSCALL_RETREG = -ERESTARTSYS; // -EINTR;
-			RT_DO_SIGNAL(regs);
-			regs->LINUX_SYSCALL_RETREG = saved_eax;
-			if (task->is_hard < 0) {
-				steal_from_linux(task);
-			}
-		} while (0);
-#endif
 		task->unblocked = task->force_soft = 0;
 		task->usp_flags &= ~FORCE_SOFT;
-		return;
-	}
-	force_soft(task);
-}
-
-long long rtai_lxrt_invoke (unsigned int lxsrq, void *arg, struct pt_regs *regs)
-{
-	RT_TASK *task;
-
-	if (likely((task = current->rtai_tskext(TSKEXT0)) != NULL)) {
-		long long retval;
-		rt_do_signal(regs, task);
-		retval = handle_lxrt_request(lxsrq, arg, task);
-		rt_do_signal(regs, task);
-		return retval;
-	} else {
-		return handle_lxrt_request(lxsrq, arg, task);
-	}
-}
-
-#else  // end restructured, begin old
-
-static inline int rt_do_signal(struct pt_regs *regs, RT_TASK *task)
-{
-	if (unlikely(task->unblocked)) {
-		int retval = task->unblocked < 0;
+	} else if (unlikely(task->is_hard < 0)) {
+		SYSW_DIAG_MSG(rt_printk("GOING BACK TO HARD (SYSLXRT, DIRECT), PID = %d.\n", current->pid););
+		steal_from_linux(task);
+		SYSW_DIAG_MSG(rt_printk("GONE BACK TO HARD (SYSLXRT),  PID = %d.\n", current->pid););
+	} else if (unlikely(task->unblocked)) {
 		if (task->is_hard > 0) {
 			give_back_to_linux(task, -1);
 		}
-#ifdef RTAI_DO_LINUX_SIGNAL
-		if (task->unblocked > 0) {
-			if (likely(regs->LINUX_SYSCALL_NR < RTAI_SYSCALL_NR)) {
-				unsigned long saved_eax = regs->LINUX_SYSCALL_RETREG;
-				regs->LINUX_SYSCALL_RETREG = -EINTR;
-//				regs->LINUX_SYSCALL_RETREG = -ERESTARTSYS;
-				RT_DO_SIGNAL(regs);
-				regs->LINUX_SYSCALL_RETREG = saved_eax;
-				if (task->is_hard < 0) {
-					steal_from_linux(task);
-				}
-			}
-		}
-#endif
 		task->unblocked = 0;
-		return retval;
 	}
-	return 1;
 }
 
-long long rtai_lxrt_invoke (unsigned int lxsrq, void *arg, struct pt_regs *regs)
+long long rtai_lxrt_invoke (unsigned int lxsrq, void *arg)
 {
 	RT_TASK *task;
 
 	if (likely((task = current->rtai_tskext(TSKEXT0)) != NULL)) {
 		long long retval;
-		if (unlikely(rt_do_signal(regs, task))) {
-			force_soft(task);
-		}
+		check_to_soften_harden(task);
 		retval = handle_lxrt_request(lxsrq, arg, task);
-		if (unlikely(rt_do_signal(regs, task))) {
-			force_soft(task);
-		}
+		check_to_soften_harden(task);
 		return retval;
-	} else {
-		return handle_lxrt_request(lxsrq, arg, task);
-	}
-}
+	} 
 
-#endif // end olf part of restructured
+	return handle_lxrt_request(lxsrq, arg, NULL);
+}
 
 int set_rt_fun_ext_index(struct rt_fun_entry *fun, int idx)
 {
@@ -778,3 +824,124 @@ void init_fun_ext (void)
 {
 	rt_fun_ext[0] = rt_fun_lxrt;
 }
+
+/* SUPPORT FOR CALIBRATING SCHEDULING LATENCIES FOR KERNEL SPACE TASKS */
+
+struct kern_cal_arg { long period, loops; RT_TASK *task; };
+
+static void kernel_calibrator(struct kern_cal_arg *calpar)
+{
+	RTIME expected;
+	int average = 0;
+	double s = 0;
+
+	expected = rt_get_time() + 10*calpar->period;
+	rt_task_make_periodic(NULL, expected, calpar->period);
+	while (calpar->loops--) {
+		expected += calpar->period;
+		rt_task_wait_period();
+		average += rt_get_time() - expected;
+		s += 3.14;
+        }
+	calpar->period = average;
+	rt_task_resume(calpar->task);
+}
+
+struct calsup { struct kern_cal_arg calpar; RT_TASK rtask; };
+
+long kernel_calibrator_spv(long period, long loops, RT_TASK *task)
+{
+	struct calsup *calsup;
+	calsup = kmalloc(sizeof(struct calsup), GFP_KERNEL);
+	calsup->calpar = (struct kern_cal_arg) { period, loops, task };
+	rt_task_init_cpuid(&calsup->rtask, (void *)kernel_calibrator, (long)&calsup->calpar, 4096, 0, 1, 0, rtai_cpuid());
+	rt_task_resume(&calsup->rtask);
+	task->fun_args[0] = (long)task;
+	((struct fun_args *)task->fun_args)->fun = (void *)rt_task_suspend;
+	rt_schedule_soft(task);
+	period = calsup->calpar.period;
+	kfree(calsup);
+	return period;
+}
+
+#if 0
+void rt_daemonize(void);
+
+struct thread_args { void *fun; long data; int priority; int policy; int cpus_allowed; RT_TASK *task; struct semaphore *sem; };
+
+static void kthread_fun(struct thread_args *args) 
+{
+	int linux_rt_priority;
+
+	rt_daemonize();
+        if (args->policy == SCHED_NORMAL) {
+                linux_rt_priority = 0;
+        } else if ((linux_rt_priority = MAX_RT_PRIO - 1 - args->priority) < 1) {
+                linux_rt_priority = 1;
+	}
+	rtai_set_linux_task_priority(current, args->policy, linux_rt_priority);
+	
+	if ((args->task = __task_init(rt_get_name(NULL), args->priority, 0, 0, args->cpus_allowed))) {
+		RT_TASK *task = args->task;
+		void (*fun)(long) = args->fun;
+		long data = args->data;
+		up(args->sem);
+		rt_make_hard_real_time(task);
+		fun(data);
+		rt_thread_delete(task);
+	} 
+	return;
+}
+
+RT_TASK *rt_kthread_create(void *fun, long data, int priority, int linux_policy, int cpus_allowed)
+{
+	struct semaphore sem;
+	struct thread_args args = { fun, data, priority, linux_policy, cpus_allowed, NULL, &sem };
+	init_MUTEX_LOCKED(&sem);
+	kernel_thread((void *)kthread_fun, &args, 0);
+	down(&sem);
+	msleep(100);
+	return args.task;
+}
+	
+#include <linux/kthread.h>
+long rt_thread_create(void *fun, void *args, int stack_size)
+{
+	long retval;
+	RT_TASK *task;
+	if ((task = current->rtai_tskext(TSKEXT0)) && task->is_hard > 0) {
+		rt_make_soft_real_time(task);
+	}
+//	retval = kernel_thread(fun, args, 0);
+	retval = (long)kthread_run(fun, args, "RTAI");
+	if (task && !task->is_hard) {
+		rt_make_hard_real_time(task);
+	}
+	return retval;
+}
+EXPORT_SYMBOL(rt_thread_create);
+	
+RT_TASK *rt_thread_init(unsigned long name, int priority, int max_msg_size, int policy, int cpus_allowed)
+{
+	int linux_rt_priority;
+	RT_TASK *task;
+        if (policy == SCHED_NORMAL) {
+                linux_rt_priority = 0;
+        } else if ((linux_rt_priority = MAX_RT_PRIO - 1 - priority) < 1) {
+                linux_rt_priority = 1;
+	}
+	rtai_set_linux_task_priority(current, policy, linux_rt_priority);
+//	rt_daemonize();
+	if ((task = __task_init(name ? name : rt_get_name(NULL), priority, 0, max_msg_size, cpus_allowed))) {
+		rt_make_hard_real_time(task);
+	} 
+	return task;
+}
+EXPORT_SYMBOL(rt_thread_init);
+
+int rt_thread_delete(RT_TASK *rt_task)
+{
+	return __task_delete(rt_task);
+}
+EXPORT_SYMBOL(rt_thread_delete);
+#endif

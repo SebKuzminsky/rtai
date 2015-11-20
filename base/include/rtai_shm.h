@@ -35,7 +35,7 @@ ACKNOWLEDGMENTS:
 /** @addtogroup shm
  *@{*/
 
-#define GLOBAL_HEAP_ID  0x9ac6d9e5  // nam2num("RTGLBH");
+#define GLOBAL_HEAP_ID  0x9ac6d9e7  // nam2num("RTGLBH");
 
 #define USE_VMALLOC     0
 #define USE_GFP_KERNEL  1
@@ -91,6 +91,9 @@ ACKNOWLEDGMENTS:
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/vmalloc.h>
+#include <linux/mm.h>
+
+#if 0
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0)
 #include <linux/wrapper.h>
 #else /* >= 2.6.0 */
@@ -98,6 +101,7 @@ ACKNOWLEDGMENTS:
 #define mem_map_reserve(p)   SetPageReserved(p)
 #define mem_map_unreserve(p) ClearPageReserved(p)
 #endif /* < 2.6.0 */
+#endif
 
 #define UVIRT_TO_KVA(adr)  uvirt_to_kva(pgd_offset_k(adr), (adr))
 
@@ -108,10 +112,51 @@ static inline int remap_page_range(struct vm_area_struct *vma, unsigned long uva
 }
 #endif
 
+#include <rtai.h>
+//#include <asm/rtai_shm.h>
+
 #include <rtai_malloc.h>
 
-#include <rtai.h>
-#include <asm/rtai_shm.h>
+#ifndef CONFIG_MMU
+
+static inline unsigned long uvirt_to_kva(pgd_t *pgd, unsigned long adr)
+{
+	return adr;
+}
+
+#else
+
+static inline unsigned long uvirt_to_kva(pgd_t *pgd, unsigned long adr)
+{
+	if (!pgd_none(*pgd) && !pgd_bad(*pgd)) {
+		pmd_t *pmd;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
+		pmd = pmd_offset(pgd, adr);
+#else /* >= 2.6.11 */
+		pmd = pmd_offset(pud_offset(pgd, adr), adr);
+#endif /* < 2.6.11 */
+		if (!pmd_none(*pmd)) {
+			pte_t *ptep, pte;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0)
+			ptep = pte_offset(pmd, adr);
+#else /* >= 2.6.0 */
+			ptep = pte_offset_kernel(pmd, adr);
+#endif /* < 2.6.0 */
+			pte = *ptep;
+			if (pte_present(pte)) {
+				return (((unsigned long)page_address(pte_page(pte))) | (adr & (PAGE_SIZE - 1)));
+			}
+		}
+	}
+	return 0UL;
+}
+
+static inline unsigned long kvirt_to_pa(unsigned long adr)
+{
+	return virt_to_phys((void *)uvirt_to_kva(pgd_offset_k(adr), adr));
+}
+
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -185,7 +230,7 @@ int rkmmap(void *mem,
 
 #define RTAI_SHM_DEV  "/dev/rtai_shm"
 
-static inline void *_rt_shm_alloc(void *start, unsigned long name, int size, int suprt, int isheap)
+RTAI_PROTO (void *, _rt_shm_alloc, (void *start, unsigned long name, int size, int suprt, int isheap))
 {
 	int hook;
 	void *adr = NULL;
@@ -242,7 +287,10 @@ static inline void *_rt_shm_alloc(void *start, unsigned long name, int size, int
  * This function should not be used in newly developed applications. See
  * rt_shm_alloc fro more details.
  *
- * @returns a valid address on succes, 0 on failure.
+ * @returns a valid address on succes, on failure: 0 if it was unable to 
+ * allocate any memory, MAP_FAILED if it was possible to allocate the
+ * required memory but failed to mmap it to user space, in which case the
+ * allocated memory is freed anyhow.
  *
  */
 
@@ -285,7 +333,10 @@ static inline void *_rt_shm_alloc(void *start, unsigned long name, int size, int
  * @note If the same process calls rtai_malloc_adr and rtai_malloc() twice in
  * the same process it get a zero return value on the second call.
  *
- * @returns a valid address on succes, 0 on failure.
+ * @returns a valid address on succes, on failure: 0 if it was unable to
+ * allocate any memory, MAP_FAILED if it was possible to allocate the
+ * required memory but failed to mmap it to user space, in which case the
+ * allocated memory is freed anyhow.
  *
  */
 
@@ -321,7 +372,7 @@ static inline void *_rt_shm_alloc(void *start, unsigned long name, int size, int
 #define rtai_malloc_adr(start_address, name, size)  \
 	_rt_shm_alloc(start_address, name, size, USE_VMALLOC, 0)  // legacy
 
-static inline int rt_shm_free(unsigned long name) 
+RTAI_PROTO(int, rt_shm_free, (unsigned long name))
 {
 	int hook, size;
 	struct { void *nameadr; } arg = { &name };

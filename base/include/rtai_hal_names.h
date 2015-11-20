@@ -27,118 +27,6 @@
 #define TSKEXT2  (HAL_ROOT_NPTDKEYS - 2)
 #define TSKEXT3  (HAL_ROOT_NPTDKEYS - 1)
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,32) || (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,0) && LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13))
-
-#define HAL_VERSION_STRING   ADEOS_VERSION_STRING
-
-#define HAL_NR_CPUS          ADEOS_NR_CPUS
-#define HAL_NR_FAULTS        ADEOS_NR_FAULTS
-#define HAL_NR_EVENTS        ADEOS_NR_EVENTS
-#define HAL_ROOT_NPTDKEYS    ADEOS_ROOT_NPTDKEYS
-
-#define HAL_APIC_HIGH_VECTOR  ADEOS_SERVICE_VECTOR3
-#define HAL_APIC_LOW_VECTOR   ADEOS_SERVICE_VECTOR2
-
-#define HAL_SCHEDULE_HEAD     ADEOS_SCHEDULE_HEAD
-#define HAL_SCHEDULE_TAIL     ADEOS_SCHEDULE_TAIL
-#define HAL_SYSCALL_PROLOGUE  ADEOS_SYSCALL_PROLOGUE
-#define HAL_SYSCALL_EPILOGUE  1000000 // invalid for sure, will be rejected, OK ADEOS_SYSCALL_EPILOGUE
-#define HAL_EXIT_PROCESS      ADEOS_EXIT_PROCESS
-#define HAL_KICK_PROCESS      ADEOS_KICK_PROCESS
-
-extern struct list_head __adeos_pipeline;
-
-#define hal_pipeline           __adeos_pipeline
-#define hal_domain_struct      adomain 
-#define hal_root_domain        adp_root 
-#define hal_current_domain(x)  adp_cpu_current[x] 
-
-#define hal_critical_enter  adeos_critical_enter
-#define hal_critical_exit   adeos_critical_exit
-
-#define hal_clear_irq   __adeos_clear_irq
-#define hal_lock_irq    __adeos_lock_irq
-#define hal_unlock_irq  __adeos_unlock_irq
-
-#define hal_std_irq_dtype        __adeos_std_irq_dtype
-#define hal_adeos_std_irq_dtype  __adeos_std_irq_dtype
-
-#define hal_tick_regs  __adeos_tick_regs
-#define hal_tick_irq   __adeos_tick_irq
-
-#define hal_sync_stage  __adeos_sync_stage
-
-#define hal_set_irq_affinity  adeos_set_irq_affinity
-
-#define hal_set_irq_handler   adeos_set_irq_handler
-
-#define hal_propagate_event  adeos_propagate_event
-
-#define hal_get_sysinfo  adeos_get_sysinfo
-
-#define INTERCEPT_WAKE_UP_TASK(data)  (((struct sig_wakeup_t *)data)->task)
-
-#define FIRST_LINE_OF_RTAI_DOMAIN_ENTRY  static void rtai_domain_entry(int iflag) { if (iflag)
-#define LAST_LINE_OF_RTAI_DOMAIN_ENTRY   }
-
-#ifdef CONFIG_ADEOS_NOTHREADS
-#define HAL_TYPE  "ADEOS-NOTHREADS"
-#define hal_suspend_domain()  break
-#else
-#define HAL_TYPE  "ADEOS-THREADS"
-#define hal_suspend_domain()  adeos_suspend_domain()
-#endif
-
-#define hal_alloc_irq       adeos_alloc_irq
-#define hal_free_irq        adeos_free_irq
-#define hal_virtualize_irq  adeos_virtualize_irq_from
-#define hal_irq_hits_pp(irq, domain, cpuid) \
-do { \
-	domain->cpudata[cpuid].irq_hits[irq]++; \
-} while (0)
-
-#define hal_sysinfo_struct         adsysinfo
-#define hal_attr_struct            adattr
-#define hal_init_attr              adeos_init_attr
-#define hal_register_domain        adeos_register_domain
-#define hal_unregister_domain      adeos_unregister_domain
-#define hal_catch_event            adeos_catch_event_from
-#define hal_event_handler          adeos_event_handler
-#define hal_event_handler_fun(e)   events[e].handler
-
-#define hal_set_printk_sync   adeos_set_printk_sync
-#define hal_set_printk_async  adeos_set_printk_async
-
-#define hal_schedule_back_root(prev) \
-do { \
-	if ((prev)->rtai_tskext(HAL_ROOT_NPTDKEYS - 1)) { \
-		__adeos_schedule_back_root((prev)->rtai_tskext(HAL_ROOT_NPTDKEYS - 1)); \
-		(prev)->rtai_tskext(HAL_ROOT_NPTDKEYS - 1) = NULL; \
-	} else { \
-		__adeos_schedule_back_root(prev); \
-	} \
-} while (0)
-
-#define hal_processor_id  adeos_processor_id
-
-#define hal_hw_cli                adeos_hw_cli
-#define hal_hw_sti                adeos_hw_sti
-#define hal_hw_local_irq_save     adeos_hw_local_irq_save
-#define hal_hw_local_irq_restore  adeos_hw_local_irq_restore
-#define hal_hw_local_irq_flags    adeos_hw_local_irq_flags
-
-#define hal_unstall_pipeline_from  adeos_unstall_pipeline_from
-
-#define hal_ack_system_irq  __adeos_ack_system_irq
-
-#define hal_irq_handler  adeos_extern_irq_handler
-
-#define hal_tskext  ptd
-
-#define hal_set_linux_task_priority  __adeos_setscheduler_root
-
-#else
-
 #define HAL_VERSION_STRING   IPIPE_VERSION_STRING
 
 #define HAL_NR_CPUS          IPIPE_NR_CPUS
@@ -146,8 +34,8 @@ do { \
 #define HAL_NR_EVENTS        IPIPE_NR_EVENTS
 #define HAL_ROOT_NPTDKEYS    IPIPE_ROOT_NPTDKEYS
 
-#define HAL_APIC_HIGH_VECTOR  IPIPE_SERVICE_VECTOR3
-#define HAL_APIC_LOW_VECTOR   IPIPE_SERVICE_VECTOR2
+#define HAL_APIC_HIGH_VECTOR  IPIPE_HRTIMER_VECTOR //IPIPE_SERVICE_VECTOR3
+#define HAL_APIC_LOW_VECTOR   IPIPE_RESCHEDULE_VECTOR //IPIPE_SERVICE_VECTOR2
 
 #define HAL_SCHEDULE_HEAD     IPIPE_EVENT_SCHEDULE
 #define HAL_SCHEDULE_TAIL     (IPIPE_FIRST_EVENT - 2)  // safely unused, cared
@@ -166,6 +54,9 @@ do { \
 #else
 #define hal_current_domain(cpuid)  (ipipe_percpu_domain[cpuid])
 #endif
+
+#define hal_propagate_irq   ipipe_propagate_irq
+#define hal_schedule_irq    ipipe_schedule_irq
 
 #define hal_critical_enter  ipipe_critical_enter
 #define hal_critical_exit   ipipe_critical_exit
@@ -205,7 +96,7 @@ do { \
 #define hal_alloc_irq       ipipe_alloc_virq
 #define hal_free_irq        ipipe_free_virq
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,32) || (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,0) && LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14))
+#if !defined(CONFIG_PPC) && (LINUX_VERSION_CODE < KERNEL_VERSION(2,4,32) || (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,0) && LINUX_VERSION_CODE < KERNEL_VERSION(2,6,14)))
 #define hal_virtualize_irq  ipipe_virtualize_irq
 #define hal_irq_hits_pp(irq, domain, cpuid) \
 do { \
@@ -228,7 +119,7 @@ do { \
 #define hal_unregister_domain      ipipe_unregister_domain
 #define hal_catch_event            ipipe_catch_event
 #define hal_event_handler          ipipe_event_handler
-#define hal_event_handler_fun(e)   evhand[e]
+#define hal_event_handler_fun(e)   legacy.handlers[e] //evhand[e]
 
 #define hal_set_printk_sync   ipipe_set_printk_sync
 #define hal_set_printk_async  ipipe_set_printk_async
@@ -251,6 +142,9 @@ do { \
 #define hal_hw_local_irq_restore  local_irq_restore_hw
 #define hal_hw_local_irq_flags    local_save_flags_hw
 
+#define hal_set_timer(ns)  ipipe_tune_timer(ns, 0)
+#define hal_reset_timer()  ipipe_tune_timer(0, IPIPE_RESET_TIMER)
+
 #define hal_unstall_pipeline_from  ipipe_unstall_pipeline_from
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
@@ -259,13 +153,11 @@ do { \
 #define hal_ack_system_irq  __ipipe_ack_apic
 #endif
 
-#define hal_irq_handler     ipipe_irq_handler
+#define hal_irq_handler     rtai_irq_handler
 
 #define hal_tskext  ptd
 
 #define hal_set_linux_task_priority  ipipe_setscheduler_root
-
-#endif
 
 #if defined(IPIPE_ROOT_NPTDKEYS) && TSKEXT0 < 0
 #error *** TSKEXTs WILL CAUSE MEMORY LEAKS, CHECK BOUNDS IN HAL PATCHES ***

@@ -18,7 +18,7 @@ function [x,y,typ] = rtai4_comedi_dioout(job,arg1,arg2)
     exprs=graphics.exprs;
     while %t do
       [ok,ch,name,thresh,exprs]=..
-      getvalue('Set RTAI-COMEDI DIO block parameters',..
+      scicos_getvalue('Set RTAI-COMEDI DIO block parameters',..
       ['Channel:';
        'Device:';
        'Threshold'],..
@@ -26,12 +26,12 @@ function [x,y,typ] = rtai4_comedi_dioout(job,arg1,arg2)
       if ~ok then break,end
       if exists('inport') then in=ones(inport,1), out=[], else in=1, out=[], end
       [model,graphics,ok]=check_io(model,graphics,in,out,1,[])
+      dev=str2code(name)
       if ok then
         graphics.exprs=exprs;
         model.rpar=[thresh];
         model.ipar=[ch;
-                    length(name);
-                    ascii(name)'];
+                    dev(length(dev))];
         model.dstate=[];
         x.graphics=graphics;x.model=model
         break
@@ -47,12 +47,11 @@ function [x,y,typ] = rtai4_comedi_dioout(job,arg1,arg2)
     model.evtin=1
     model.rpar=[thresh]
     model.ipar=[ch;
-                length(name);
-                ascii(name)']
+                0]
     model.dstate=[];
     model.blocktype='d'
     model.dep_ut=[%t %f]
-    exprs=[sci2exp(ch),name,sci2exp(thresh)]
+    exprs=[sci2exp(ch);name;sci2exp(thresh)]
     gr_i=['xstringb(orig(1),orig(2),[''COMEDI DO'';name+'' CH-''+string(ch)],sz(1),sz(2),''fill'');']
     x=standard_define([3 2],model,exprs,gr_i)
   end

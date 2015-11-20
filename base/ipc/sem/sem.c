@@ -3,8 +3,7 @@
  * Semaphore functions.
  * @author Paolo Mantegazza
  *
- * @note Copyright (C) 1999-2003 Paolo Mantegazza
- * <mantegazza@aero.polimi.it>
+ * @note Copyright (C) 1999-2010 Paolo Mantegazza <mantegazza@aero.polimi.it>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -43,6 +42,67 @@
 MODULE_LICENSE("GPL");
 
 extern struct epoch_struct boot_epoch;
+
+#if 1
+
+#define UBI_MAIOR_MINOR_CESSAT_WAIT(sem) \
+do { \
+	RT_TASK *task; \
+	if ((task = sem->owndby) && rt_current->priority < task->priority && task->running <= 0) { \
+		if (!task->running) { \
+			sem->count--; \
+			rem_ready_task(task); \
+			task->state |= RT_SCHED_SEMAPHORE; \
+		} else if (task->resume_time > rt_smp_time_h[task->runnable_on_cpus]) { \
+			sem->count--; \
+			rem_ready_task(task); \
+			task->state |= (RT_SCHED_SEMAPHORE | RT_SCHED_DELAYED);\
+			enq_timed_task(task); \
+		} \
+		enqueue_blocked(task, &sem->queue, PRIO_Q); \
+		enqueue_resqel(&sem->resq, sem->owndby = rt_current); \
+		rt_global_restore_flags(flags); \
+		return 1; \
+	} \
+} while (0)
+
+#define UBI_MAIOR_MINOR_CESSAT_WAIT_IF(sem) \
+do { \
+	if (sem->type > 0) { \
+		RT_TASK *rt_current = RT_CURRENT; \
+		UBI_MAIOR_MINOR_CESSAT_WAIT(sem); \
+	} \
+} while (0)
+
+#else
+
+#define UBI_MAIOR_MINOR_CESSAT_WAIT(sem)
+
+#define UBI_MAIOR_MINOR_CESSAT_WAIT_IF(sem)
+
+#endif
+
+#ifdef CONFIG_RTAI_RT_POLL
+
+#define WAKEUP_WAIT_ONE_POLLER(wakeup) \
+	if (wakeup) rt_wakeup_pollers(&sem->poll_wait_one, 0);
+
+#define WAKEUP_WAIT_ALL_POLLERS(wakeup) \
+	do { \
+		WAKEUP_WAIT_ONE_POLLER(wakeup) \
+		if (sem->count == 1) rt_wakeup_pollers(&sem->poll_wait_all, 0);\
+	} while (0)
+
+#else
+
+#define WAKEUP_WAIT_ONE_POLLER(wakeup)
+
+#define WAKEUP_WAIT_ALL_POLLERS(wakeup) 
+
+#endif
+
+#define CHECK_SEM_MAGIC(sem) \
+do { if (sem->magic != RT_SEM_MAGIC) return RTE_OBJINV; } while (0)
 
 /* +++++++++++++++++++++ ALL SEMAPHORES TYPES SUPPORT +++++++++++++++++++++++ */
 
@@ -128,6 +188,13 @@ RTAI_SYSCALL_MODE void rt_typed_sem_init(SEM *sem, int value, int type)
 
 	sem->resq.prev = sem->resq.next = &sem->resq;
 	sem->resq.task = (void *)&sem->queue;
+#ifdef CONFIG_RTAI_RT_POLL
+	sem->poll_wait_all.pollq.prev = sem->poll_wait_all.pollq.next = &(sem->poll_wait_all.pollq);
+	sem->poll_wait_one.pollq.prev = sem->poll_wait_one.pollq.next = &(sem->poll_wait_one.pollq);
+	sem->poll_wait_all.pollq.task = sem->poll_wait_one.pollq.task = NULL;
+        spin_lock_init(&(sem->poll_wait_all.pollock));
+        spin_lock_init(&(sem->poll_wait_one.pollock));
+#endif
 }
 
 
@@ -194,10 +261,10 @@ RTAI_SYSCALL_MODE int rt_sem_delete(SEM *sem)
 	unsigned long schedmap, sched;
 	QUEUE *q;
 
-	if (sem->magic != RT_SEM_MAGIC) {
-		return RTE_OBJINV;
-	}
+	CHECK_SEM_MAGIC(sem);
 
+	rt_wakeup_pollers(&sem->poll_wait_all, RTE_OBJREM);
+	rt_wakeup_pollers(&sem->poll_wait_one, RTE_OBJREM);
 	schedmap = 0;
 	q = &(sem->queue);
 	flags = rt_global_save_flags_and_cli();
@@ -272,9 +339,7 @@ RTAI_SYSCALL_MODE int rt_sem_signal(SEM *sem)
 	RT_TASK *task;
 	int tosched;
 
-	if (sem->magic != RT_SEM_MAGIC) {
-		return RTE_OBJINV;
-	}
+	CHECK_SEM_MAGIC(sem);
 
 	flags = rt_global_save_flags_and_cli();
 	if (sem->type) {
@@ -301,8 +366,10 @@ RTAI_SYSCALL_MODE int rt_sem_signal(SEM *sem)
 			if (sem->type <= 0) {
 				RT_SCHEDULE(task, rtai_cpuid());
 				rt_global_restore_flags(flags);
+				WAKEUP_WAIT_ALL_POLLERS(1);
 				return 0;
 			}
+			task->running = - (task->state & RT_SCHED_DELAYED);
 			tosched = 1;
 			goto res;
 		}
@@ -312,7 +379,7 @@ res:	if (sem->type > 0) {
 		DECLARE_RT_CURRENT;
 		int sched;
 		ASSIGN_RT_CURRENT;
-		sem->owndby = 0;
+		sem->owndby = task;
 		sched = dequeue_resqel_reset_current_priority(&sem->resq, rt_current);
 		if (rt_current->suspdepth) {
 			if (rt_current->suspdepth > 0) {
@@ -334,6 +401,7 @@ res:	if (sem->type > 0) {
 		}
 	}
 	rt_global_restore_flags(flags);
+	WAKEUP_WAIT_ALL_POLLERS(1);
 	return 0;
 }
 
@@ -347,6 +415,7 @@ res:	if (sem->type > 0) {
  * variables but can be of help in many other instances. After the broadcast
  * the semaphore counts is set to zero, thus all tasks waiting on it will
  * blocked.
+ * rt_sem_broadcast should not be used for resource semaphares.
  *
  * @param sem points to the structure used in the call to @ref
  * rt_sem_init().
@@ -359,13 +428,11 @@ RTAI_SYSCALL_MODE int rt_sem_broadcast(SEM *sem)
 	RT_TASK *task;
 	QUEUE *q;
 
-	if (sem->magic != RT_SEM_MAGIC) {
-		return RTE_OBJINV;
-	}
+	CHECK_SEM_MAGIC(sem);
+
 	schedmap = 0;
-	q = &(sem->queue);
 	flags = rt_global_save_flags_and_cli();
-	while ((q = q->next) != &(sem->queue)) {
+	while ((q = sem->queue.next) != &(sem->queue)) {
 		if ((task = q->task)) {
 			dequeue_blocked(task = q->task);
 			rem_timed_task(task);
@@ -386,6 +453,7 @@ RTAI_SYSCALL_MODE int rt_sem_broadcast(SEM *sem)
 		}
 	}
 	rt_global_restore_flags(flags);
+	WAKEUP_WAIT_ONE_POLLER(schedmap);
 	return 0;
 }
 
@@ -438,9 +506,7 @@ RTAI_SYSCALL_MODE int rt_sem_wait(SEM *sem)
 	unsigned long flags;
 	int count;
 
-	if (sem->magic != RT_SEM_MAGIC) {
-		return RTE_OBJINV;
-	}
+	CHECK_SEM_MAGIC(sem);
 
 	flags = rt_global_save_flags_and_cli();
 	rt_current = RT_CURRENT;
@@ -448,6 +514,7 @@ RTAI_SYSCALL_MODE int rt_sem_wait(SEM *sem)
 		void *retp;
 		unsigned long schedmap;
 		if (sem->type > 0) {
+			UBI_MAIOR_MINOR_CESSAT_WAIT(sem);
 			if (sem->restype && sem->owndby == rt_current) {
 				if (sem->restype > 0) {
 					count = sem->type++;
@@ -523,12 +590,11 @@ RTAI_SYSCALL_MODE int rt_sem_wait_if(SEM *sem)
 	int count;
 	unsigned long flags;
 
-	if (sem->magic != RT_SEM_MAGIC) {
-		return RTE_OBJINV;
-	}
+	CHECK_SEM_MAGIC(sem);
 
 	flags = rt_global_save_flags_and_cli();
 	if ((count = sem->count) <= 0) {
+		UBI_MAIOR_MINOR_CESSAT_WAIT_IF(sem);
 		if (sem->restype && sem->owndby == RT_CURRENT) {
 			if (sem->restype > 0) {
 				count = sem->type++;
@@ -589,9 +655,7 @@ RTAI_SYSCALL_MODE int rt_sem_wait_until(SEM *sem, RTIME time)
 	int count;
 	unsigned long flags;
 
-	if (sem->magic != RT_SEM_MAGIC) {
-		return RTE_OBJINV;
-	}
+	CHECK_SEM_MAGIC(sem);
 
 	REALTIME2COUNT(time);
 
@@ -603,6 +667,7 @@ RTAI_SYSCALL_MODE int rt_sem_wait_until(SEM *sem, RTIME time)
 		if ((rt_current->resume_time = time) > rt_time_h) {
 			unsigned long schedmap;
 			if (sem->type > 0) {
+				UBI_MAIOR_MINOR_CESSAT_WAIT(sem);
 				if (sem->restype && sem->owndby == rt_current) {
 					if (sem->restype > 0) {
 						count = sem->type++;
@@ -711,9 +776,7 @@ RTAI_SYSCALL_MODE int rt_sem_wait_barrier(SEM *sem)
 {
 	unsigned long flags;
 
-	if (sem->magic != RT_SEM_MAGIC) {
-		return RTE_OBJINV;
-	}
+	CHECK_SEM_MAGIC(sem);
 
 	flags = rt_global_save_flags_and_cli();
 	if (!sem->owndby) {
@@ -752,9 +815,8 @@ RTAI_SYSCALL_MODE int rt_cond_signal(CND *cnd)
 	unsigned long flags;
 	RT_TASK *task;
 
-	if (cnd->magic != RT_SEM_MAGIC) {
-		return RTE_OBJINV;
-	}
+	CHECK_SEM_MAGIC(cnd);
+
 	flags = rt_global_save_flags_and_cli();
 	if ((task = (cnd->queue.next)->task)) {
 		dequeue_blocked(task);
@@ -784,6 +846,7 @@ static inline int rt_cndmtx_signal(SEM *mtx, RT_TASK *rt_current)
 		rem_timed_task(task);
 		if (task->state != RT_SCHED_READY && (task->state &= ~(RT_SCHED_SEMAPHORE | RT_SCHED_DELAYED)) == RT_SCHED_READY) {
 			enq_ready_task(task);
+			task->running = - (task->state & RT_SCHED_DELAYED);
 		}
 	}
 	mtx->owndby = 0;
@@ -823,9 +886,9 @@ RTAI_SYSCALL_MODE int rt_cond_wait(CND *cnd, SEM *mtx)
 	void *retp;
 	int retval, type;
 
-	if (cnd->magic != RT_SEM_MAGIC || mtx->magic != RT_SEM_MAGIC) {
-		return RTE_OBJINV;
-	}
+	CHECK_SEM_MAGIC(cnd);
+	CHECK_SEM_MAGIC(mtx);
+
 	flags = rt_global_save_flags_and_cli();
 	rt_current = RT_CURRENT;
 	if (mtx->owndby != rt_current) {
@@ -884,9 +947,8 @@ RTAI_SYSCALL_MODE int rt_cond_wait_until(CND *cnd, SEM *mtx, RTIME time)
 	void *retp;
 	int retval, type;
 
-	if (cnd->magic != RT_SEM_MAGIC && mtx->magic != RT_SEM_MAGIC) {
-		return RTE_OBJINV;
-	}
+	CHECK_SEM_MAGIC(cnd);
+	CHECK_SEM_MAGIC(mtx);
 
 	REALTIME2COUNT(time);
 
@@ -1450,8 +1512,8 @@ RTAI_SYSCALL_MODE int rt_spl_lock_timed(SPL *spl, unsigned long ns)
 	} else {
 		RTIME end_time;
 		long locked;
-		end_time = rdtsc() + imuldiv(ns, tuned.cpu_freq, 1000000000);
-		while ((locked = (long)cmpxchg(&spl->owndby, 0L, rt_current)) && rdtsc() < end_time);
+		end_time = rtai_rdtsc() + imuldiv(ns, tuned.cpu_freq, 1000000000);
+		while ((locked = (long)cmpxchg(&spl->owndby, 0L, rt_current)) && rtai_rdtsc() < end_time);
 		if (locked) {
 			rtai_restore_flags(flags);
 			return -1;
@@ -1761,6 +1823,310 @@ RTAI_SYSCALL_MODE int rt_named_spl_delete(SPL *spl)
 	return ret;
 }
 
+/* ++++++++++++++++++++++++++++++ POLLING SERVICE +++++++++++++++++++++++++++ */
+
+struct rt_poll_enc rt_poll_ofstfun[] = {
+	[RT_POLL_NOT_TO_USE]   = {            0           , NULL },
+#ifdef CONFIG_RTAI_RT_POLL
+	[RT_POLL_MBX_RECV]     = { offsetof(MBX, poll_recv), NULL }, 
+	[RT_POLL_MBX_SEND]     = { offsetof(MBX, poll_send), NULL },
+	[RT_POLL_SEM_WAIT_ALL] = { offsetof(SEM, poll_wait_all), NULL }, 
+	[RT_POLL_SEM_WAIT_ONE] = { offsetof(SEM, poll_wait_one), NULL }
+#else
+	[RT_POLL_MBX_RECV]     = { 0, NULL }, 
+	[RT_POLL_MBX_SEND]     = { 0, NULL },
+	[RT_POLL_SEM_WAIT_ALL] = { 0, NULL }, 
+	[RT_POLL_SEM_WAIT_ONE] = { 0, NULL }
+#endif
+};
+EXPORT_SYMBOL(rt_poll_ofstfun);
+
+#ifdef CONFIG_RTAI_RT_POLL
+
+typedef struct rt_poll_sem { QUEUE queue; RT_TASK *task; int wait; } POLL_SEM;
+
+static inline void rt_schedule_tosched(unsigned long tosched_mask)
+{
+	unsigned long flags;
+#ifdef CONFIG_SMP
+	unsigned long cpumask, rmask;
+	rmask = tosched_mask & ~(cpumask = (1 << rtai_cpuid())); 
+	if (rmask) {
+		rtai_save_flags_and_cli(flags);
+		send_sched_ipi(rmask);
+		rtai_restore_flags(flags);
+	}
+	if (tosched_mask | cpumask)
+#endif
+	{
+		flags = rt_global_save_flags_and_cli();
+		rt_schedule();
+		rt_global_restore_flags(flags);
+	}
+}
+ 
+static inline int rt_poll_wait(POLL_SEM *sem, RT_TASK *rt_current)
+{
+	unsigned long flags;
+	int retval = 0;
+
+	flags = rt_global_save_flags_and_cli();
+	if (sem->wait) {
+		rt_current->state |= RT_SCHED_POLL;
+		rem_ready_current(rt_current);
+		enqueue_blocked(rt_current, &sem->queue, 1);
+		rt_schedule();
+		if (unlikely(rt_current->blocked_on != NULL)) { 
+			dequeue_blocked(rt_current);
+			retval = RTE_UNBLKD;
+		}
+	}
+	rt_global_restore_flags(flags);
+	return retval;
+}
+
+static inline int rt_poll_wait_until(POLL_SEM *sem, RTIME time, RT_TASK *rt_current, int cpuid)
+{
+	unsigned long flags;
+	int retval = 0;
+
+	flags = rt_global_save_flags_and_cli();
+	if (sem->wait) {
+		rt_current->blocked_on = &sem->queue;
+		if ((rt_current->resume_time = time) > rt_time_h) {
+			rt_current->state |= (RT_SCHED_POLL | RT_SCHED_DELAYED);
+			rem_ready_current(rt_current);
+			enqueue_blocked(rt_current, &sem->queue, 1);
+			enq_timed_task(rt_current);
+			rt_schedule();
+		}
+		if (unlikely(rt_current->blocked_on != NULL)) { 
+			retval = likely((void *)rt_current->blocked_on > RTP_HIGERR) ? RTE_TIMOUT : RTE_UNBLKD;
+			dequeue_blocked(rt_current);
+		}
+	}
+	rt_global_restore_flags(flags);
+	return retval;
+}
+
+static inline int rt_poll_signal(POLL_SEM *sem)
+{
+	unsigned long flags;
+	RT_TASK *task;
+	int retval = 0;
+
+	flags = rt_global_save_flags_and_cli();
+	sem->wait = 0;
+	if ((task = (sem->queue.next)->task)) {
+		dequeue_blocked(task);
+		rem_timed_task(task);
+		if (task->state != RT_SCHED_READY && (task->state &= ~(RT_SCHED_POLL | RT_SCHED_DELAYED)) == RT_SCHED_READY) {
+			enq_ready_task(task);
+			retval = (1 << task->runnable_on_cpus);
+		}
+	}
+	rt_global_restore_flags(flags);
+	return retval;
+}
+
+void rt_wakeup_pollers(struct rt_poll_ql *ql, int reason)
+{
+       	QUEUE *q, *queue = &ql->pollq;
+       	spinlock_t *qlock = &ql->pollock;
+
+	rt_spin_lock_irq(qlock);
+	if ((q = queue->next) != queue) {
+	        POLL_SEM *sem;
+		unsigned long tosched_mask = 0UL;
+		do {
+			sem = (POLL_SEM *)q->task;
+			q->task = (void *)((unsigned long)reason);
+			(queue->next = q->next)->prev = queue;
+			tosched_mask |= rt_poll_signal(sem);
+			rt_spin_unlock_irq(qlock);
+			rt_spin_lock_irq(qlock);
+		} while ((q = queue->next) != queue);
+		rt_spin_unlock_irq(qlock);
+		rt_schedule_tosched(tosched_mask);
+	} else {
+		rt_spin_unlock_irq(qlock);
+	}
+}
+
+EXPORT_SYMBOL(rt_wakeup_pollers);
+
+/**
+ * @anchor _rt_poll
+ * @brief Poll RTAI IPC mechanisms, waiting for the setting of desired states.
+ *
+ * RTAI _rt_poll roughly does what Linux "poll" does, i.e waits for a desired
+ * state to be set upon an RTAI IPC mechanism. At the moment it supports MBXes
+ * only. Other IPCs methods will be added as soon as they are needed. It
+ * is usable for remote objects also, through RTAI netrpc support.
+ *
+ * @param pdsa is a pointer to an array of "struct rt_poll_s" containing
+ * the list of objects to poll. Its content is not preserved through the
+ * call, so it must be initialised before any call always, see also the
+ * usage note below.
+ *
+ * @param nr is the number of elements of pdsa. If zero rt_poll will simply
+ * suspend the polling task, but only if a non null timeout is specified.
+ *
+ * @param timeout sets a possible time boundary for the polling action; its 
+ * value can be:
+ * 	-   0 for an infinitely long wait;
+ *	- < 0 for a relative timeout;
+ *	- > 0 for an absolute deadline. It has a subcase though. If it is
+ *	     set to 1, a meaningless absolute time value on any machine,
+ *	     rt_poll will not block waiting for the asked events but return
+ *	     immediately just reporting anything immediately available,
+ *	     thus becoming a multiple conditional polling.
+ *	     In such a way we have the usual 4 ways of RTAI IPC services
+ *	     within a single call.
+ *
+ * @return:
+ *	+ the number of structures for which the poll succeeded, the related
+ *	  IPCs polling result can be inferred by looking at "what"s, which 
+ *	  will be:
+ *	  - unchanged if nothing happened,
+ *	  - NULL if the related poll succeeded,
+ *	  - after a casting to int it will signal an interrupted polling,
+ *	    either because the related IPC operation was not completed for
+ *	    lack of something, e.g. buffer space, or because of an error,
+ *	    which can be inferred from the content of "what";
+ *	+ a sem error, the value of sem errors being the same as for sem_wait
+ *	  functions;
+ *	+ ENOMEM, if CONFIG_RTAI_RT_POLL_ON_STACK is not set so that RTAI
+ *	   heap is used and there is not enough space anymore (see also the
+ *	   WARNING below).
+ * 
+ * @usage note:
+ *	the user sets the elements of her/his struct rt_poll_s array: 
+ *	struct rt_poll_s { void *what; unsigned long forwhat; }, as needed.
+ *	In particular "what" must be set to the pointer of the IPC
+ *      referenced mechanism, i.e. only a MBX pointer at the moment. Then the
+ *	element "forwhat" can be set to:
+ *	- RT_POLL_MBX_RECV, to wait for something sent to a MBX,
+ *	- RT_POLL_MBX_SEND to wait for the possibility of sending to a MBX,
+ *	without being blocked.
+ *	When _rt_poll returns a user can infer the results of her/his polling
+ *	by looking at each "what' in the array, as explained above.
+ *	It is important to remark that if more tasks are using the same IPC
+ *	mechanism simultaneously, it is not possible to assume that a NULL 
+ *	"what" entails the possibility of applying the desired IPC mechanism
+ *	without blocking.
+ *	In fact the task at hand cannot be sure that another task has done
+ *	it before, so depleting/filling the polled object. Then, if it is known
+ *	that more tasks might have polled/accessed the same mechanism, the 
+ *	"_if" version of the needed action should be used if one wants to
+ *	be sure of not blocking. If an "_if" call fails then it will mean
+ *	that there was a competing polling/access on the same object.
+ *	WARNING: rt_poll needs a couple of dynamically assigned arrays.
+ *	In the default implementation they are allocated on the stack,
+ *	keeping	interrupts unblocked as far as possible. So there is the
+ *	danger that a very large polling list might exceed the kernel stack
+ *	in use. Even if that is not the case a large polling coupled to a
+ *	simultaneous flooding of nested interrupts could result in a stack
+ *	overflow as well. The solution to such problems is to use rt_malloc,
+ *	in which case the limit would be only in the memory assigned to the
+ *	RTAI dynamic heap. To be cautious rt_malloc has been set as default
+ *	in the RTAI configuration. If one is sure that short enough lists,
+ *	say 30/40 terms or so, will be used in her/his application the more
+ *	effective allocation on the stack can be use by setting 
+ *	CONFIG_RTAI_RT_POLL_ON_STACK when configuring RTAI.
+ */
+
+#define QL(i) ((struct rt_poll_ql *)(pds[i].what + rt_poll_ofstfun[pds[i].forwhat].offset))
+
+RTAI_SYSCALL_MODE int _rt_poll(struct rt_poll_s *pdsa, unsigned long nr, RTIME timeout, int space)
+{
+	struct rt_poll_s *pds;
+	int i, polled, semret, cpuid;
+	POLL_SEM sem = { { &sem.queue, &sem.queue, NULL }, rt_smp_current[cpuid = rtai_cpuid()], 1 };
+#ifdef CONFIG_RTAI_RT_POLL_ON_STACK
+	struct rt_poll_s pdsv[nr]; // BEWARE: consuming too much stack?
+	QUEUE pollq[nr];           // BEWARE: consuming too much stack?
+#else
+	struct rt_poll_s *pdsv;
+	QUEUE *pollq;
+	if (!(pdsv = rt_malloc(nr*sizeof(struct rt_poll_s))) && nr > 0) {
+		return ENOMEM;
+	}
+	if (!(pollq = rt_malloc(nr*sizeof(QUEUE))) && nr > 0) {
+		rt_free(pdsv);
+		return ENOMEM;
+	}
+#endif
+	if (space) {
+		pds = pdsa;
+	} else {
+		rt_copy_from_user(pdsv, pdsa, nr*sizeof(struct rt_poll_s));
+		pds = pdsv;
+	}
+	for (polled = i = 0; i < nr; i++) {
+		QUEUE *queue = NULL;
+		spinlock_t *qlock = NULL;
+		if (rt_poll_ofstfun[pds[i].forwhat].topoll(pds[i].what)) {
+			struct rt_poll_ql *ql = QL(i);
+			queue = &ql->pollq;
+			qlock = &ql->pollock;
+		} else {
+			pollq[i].task = NULL;
+			polled++;
+		}
+		if (queue) {
+        		QUEUE *q = queue;
+			pollq[i].task = (RT_TASK *)&sem;
+			rt_spin_lock_irq(qlock);
+			while ((q = q->next) != queue && (((POLL_SEM *)q->task)->task)->priority <= sem.task->priority);
+		        pollq[i].next = q;
+		        q->prev = (pollq[i].prev = q->prev)->next  = &pollq[i];
+			rt_spin_unlock_irq(qlock);
+		} else {
+			pds[i].forwhat = 0;
+		}
+	}
+	semret = 0;
+	if (!polled) {
+		if (timeout < 0) {
+			semret = rt_poll_wait_until(&sem, get_time() - timeout, sem.task, cpuid);
+		} else if (timeout > 1) {
+			semret = rt_poll_wait_until(&sem, timeout, sem.task, cpuid);
+		} else if (timeout < 1 && nr > 0) {
+			semret = rt_poll_wait(&sem, sem.task);
+		}
+	}
+	for (polled = i = 0; i < nr; i++) {
+		if (pds[i].forwhat) {
+			spinlock_t *qlock = &QL(i)->pollock;
+			rt_spin_lock_irq(qlock);
+			if (pollq[i].task == (void *)&sem) {
+				(pollq[i].prev)->next = pollq[i].next;
+				(pollq[i].next)->prev = pollq[i].prev;
+			}
+			rt_spin_unlock_irq(qlock);
+		}
+		if (pollq[i].task != (void *)&sem) {
+			pds[i].what = pollq[i].task;
+			polled++;
+		}
+	}
+	if (!space) {
+		rt_copy_to_user(pdsa, pds, nr*sizeof(struct rt_poll_s));
+	}
+#ifndef CONFIG_RTAI_RT_POLL_ON_STACK
+	rt_free(pdsv);
+	rt_free(pollq);
+#endif
+	return polled ? polled : semret;
+}
+
+EXPORT_SYMBOL(_rt_poll);
+
+#endif
+
+/* +++++++++++++++++++++++++++ END POLLING SERVICE ++++++++++++++++++++++++++ */
+
 /* +++++ SEMAPHORES, BARRIER, COND VARIABLES, RWLOCKS, SPINLOCKS ENTRIES ++++ */
 
 struct rt_native_fun_entry rt_sem_entries[] = {
@@ -1776,45 +2142,54 @@ struct rt_native_fun_entry rt_sem_entries[] = {
 	{ { 1, rt_sem_wait_timed },        SEM_WAIT_TIMED },
 	{ { 1, rt_sem_wait_barrier },      SEM_WAIT_BARRIER },
 	{ { 1, rt_sem_count },             SEM_COUNT },
-        { { 1, rt_cond_signal}, 	   COND_SIGNAL },
-        { { 1, rt_cond_wait },             COND_WAIT },
-        { { 1, rt_cond_wait_until },       COND_WAIT_UNTIL },
-        { { 1, rt_cond_wait_timed },       COND_WAIT_TIMED },
-        { { 0, rt_typed_rwl_init },        RWL_INIT },
-        { { 0, rt_rwl_delete },            RWL_DELETE },
+	{ { 1, rt_cond_signal}, 	   COND_SIGNAL },
+	{ { 1, rt_cond_wait },             COND_WAIT },
+	{ { 1, rt_cond_wait_until },       COND_WAIT_UNTIL },
+	{ { 1, rt_cond_wait_timed },       COND_WAIT_TIMED },
+	{ { 0, rt_typed_rwl_init },        RWL_INIT },
+	{ { 0, rt_rwl_delete },            RWL_DELETE },
 	{ { 0, _rt_named_rwl_init },	   NAMED_RWL_INIT },
 	{ { 0, rt_named_rwl_delete },      NAMED_RWL_DELETE },
-        { { 1, rt_rwl_rdlock },            RWL_RDLOCK },
-        { { 1, rt_rwl_rdlock_if },         RWL_RDLOCK_IF },
-        { { 1, rt_rwl_rdlock_until },      RWL_RDLOCK_UNTIL },
-        { { 1, rt_rwl_rdlock_timed },      RWL_RDLOCK_TIMED },
-        { { 1, rt_rwl_wrlock },            RWL_WRLOCK },
-        { { 1, rt_rwl_wrlock_if },         RWL_WRLOCK_IF },
-        { { 1, rt_rwl_wrlock_until },      RWL_WRLOCK_UNTIL },
-        { { 1, rt_rwl_wrlock_timed },      RWL_WRLOCK_TIMED },
-        { { 1, rt_rwl_unlock },            RWL_UNLOCK },
-        { { 0, rt_spl_init },              SPL_INIT },
-        { { 0, rt_spl_delete },            SPL_DELETE },
+	{ { 1, rt_rwl_rdlock },            RWL_RDLOCK },
+	{ { 1, rt_rwl_rdlock_if },         RWL_RDLOCK_IF },
+	{ { 1, rt_rwl_rdlock_until },      RWL_RDLOCK_UNTIL },
+	{ { 1, rt_rwl_rdlock_timed },      RWL_RDLOCK_TIMED },
+	{ { 1, rt_rwl_wrlock },            RWL_WRLOCK },
+	{ { 1, rt_rwl_wrlock_if },         RWL_WRLOCK_IF },
+	{ { 1, rt_rwl_wrlock_until },      RWL_WRLOCK_UNTIL },
+	{ { 1, rt_rwl_wrlock_timed },      RWL_WRLOCK_TIMED },
+	{ { 1, rt_rwl_unlock },            RWL_UNLOCK },
+	{ { 0, rt_spl_init },              SPL_INIT },
+	{ { 0, rt_spl_delete },            SPL_DELETE },
 	{ { 0, _rt_named_spl_init },	   NAMED_SPL_INIT },
 	{ { 0, rt_named_spl_delete },      NAMED_SPL_DELETE },
-        { { 1, rt_spl_lock },              SPL_LOCK },
-        { { 1, rt_spl_lock_if },           SPL_LOCK_IF },
-        { { 1, rt_spl_lock_timed },        SPL_LOCK_TIMED },
-        { { 1, rt_spl_unlock },            SPL_UNLOCK },
+	{ { 1, rt_spl_lock },              SPL_LOCK },
+	{ { 1, rt_spl_lock_if },           SPL_LOCK_IF },
+	{ { 1, rt_spl_lock_timed },        SPL_LOCK_TIMED },
+	{ { 1, rt_spl_unlock },            SPL_UNLOCK },
+#ifdef CONFIG_RTAI_RT_POLL
+	{ { 1, _rt_poll }, 	           SEM_RT_POLL },
+#endif
 	{ { 0, 0 },  		           000 }
 };
 
 extern int set_rt_fun_entries(struct rt_native_fun_entry *entry);
 extern void reset_rt_fun_entries(struct rt_native_fun_entry *entry);
 
+static int poll_wait(void *sem) { return ((SEM *)sem)->count <= 0; }
+
 int __rtai_sem_init (void)
 {
-    return set_rt_fun_entries(rt_sem_entries);
+	rt_poll_ofstfun[RT_POLL_SEM_WAIT_ALL].topoll =
+	rt_poll_ofstfun[RT_POLL_SEM_WAIT_ONE].topoll = poll_wait;
+	return set_rt_fun_entries(rt_sem_entries);
 }
 
 void __rtai_sem_exit (void)
 {
-    reset_rt_fun_entries(rt_sem_entries);
+	rt_poll_ofstfun[RT_POLL_SEM_WAIT_ALL].topoll =
+	rt_poll_ofstfun[RT_POLL_SEM_WAIT_ONE].topoll = NULL;
+	reset_rt_fun_entries(rt_sem_entries);
 }
 
 /* +++++++ END SEMAPHORES, BARRIER, COND VARIABLES, RWLOCKS, SPINLOCKS ++++++ */
@@ -1826,7 +2201,6 @@ module_init(__rtai_sem_init);
 module_exit(__rtai_sem_exit);
 #endif /* !CONFIG_RTAI_SEM_BUILTIN */
 
-#ifdef CONFIG_KBUILD
 EXPORT_SYMBOL(rt_typed_sem_init);
 EXPORT_SYMBOL(rt_sem_init);
 EXPORT_SYMBOL(rt_sem_delete);
@@ -1868,4 +2242,3 @@ EXPORT_SYMBOL(rt_spl_lock_timed);
 EXPORT_SYMBOL(rt_spl_unlock);
 EXPORT_SYMBOL(_rt_named_spl_init);
 EXPORT_SYMBOL(rt_named_spl_delete);
-#endif /* CONFIG_KBUILD */

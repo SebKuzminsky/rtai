@@ -57,7 +57,7 @@ MODULE_LICENSE("GPL");
 	do { \
 		RTIME t = timespec2count(abstime); \
 		int ret; \
-		if (abs(ret = rt_sem_wait_until(mutex, t)) >= RTE_LOWERR) { \
+		if ((ret = abs(rt_sem_wait_until(mutex, t))) >= RTE_LOWERR) { \
 			return ret == RTE_TIMOUT ? -ETIMEDOUT : -EBADF; \
 		} \
 	} while (0)
@@ -80,10 +80,10 @@ MODULE_LICENSE("GPL");
 		RTIME t = timespec2count(abstime); \
 		int ret; \
 		rt_sem_signal(mutex); \
-		if (abs(ret = rt_sem_wait_until(cond, t)) >= RTE_LOWERR) { \
+		if ((ret = abs(rt_sem_wait_until(cond, t))) >= RTE_LOWERR) { \
 			return ret == RTE_TIMOUT ? -ETIMEDOUT : -EBADF; \
 		} \
-		if (abs(ret = rt_sem_wait_until(mutex, t)) >= RTE_LOWERR) { \
+		if ((ret = abs(rt_sem_wait_until(mutex, t))) >= RTE_LOWERR) { \
 			rt_sem_signal(cond); \
 			return ret == RTE_TIMOUT ? -ETIMEDOUT : -EBADF; \
 		} \
@@ -914,11 +914,10 @@ EXPORT_SYMBOL(mq_unlink);
 
 #ifdef CONFIG_PROC_FS
 
-static int pqueue_read_proc(char *page, char **start, off_t off, int count,
-			    int *eof, void *data)
+static int PROC_READ_FUN(pqueue_read_proc)
 {
-PROC_PRINT_VARS;
 int ind;
+PROC_PRINT_VARS;
 
     PROC_PRINT("\nRTAI Posix Queue Status\n");
     PROC_PRINT("-----------------------\n\n");
@@ -949,12 +948,14 @@ int ind;
     PROC_PRINT_DONE;
 }
 
+PROC_READ_OPEN_OPS(rtai_pqueue_fops, pqueue_read_proc)
+
 static struct proc_dir_entry *proc_rtai_pqueue;
 
 static int pqueue_proc_register(void)
 {
-    proc_rtai_pqueue = create_proc_entry("pqueue", 0, rtai_proc_root);
-    proc_rtai_pqueue->read_proc = pqueue_read_proc;
+    proc_rtai_pqueue = CREATE_PROC_ENTRY("pqueue", 0, rtai_proc_root, &rtai_pqueue_fops);
+    SET_PROC_READ_ENTRY(proc_rtai_pqueue, pqueue_read_proc);
     return 0;
 }
 
@@ -970,7 +971,7 @@ static int pqueue_proc_unregister(void)
 ///////////////////////////////////////////////////////////////////////////////
 
 struct rt_native_fun_entry rt_pqueue_entries[] = {
-	{ { UR1(1, 5) | UR2(4, 6), _mq_open },  	        MQ_OPEN },
+	{ { UR1(1, 5) | UR2(4, 6), _mq_open }, 	        MQ_OPEN },
         { { 1, _mq_receive },  		                MQ_RECEIVE },
         { { 1, _mq_send },    		                MQ_SEND },
         { { 1, mq_close },                              MQ_CLOSE },

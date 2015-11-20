@@ -63,6 +63,7 @@ struct rt_fifo_info_struct{
     	unsigned int fifo_number;
 	unsigned int size;
 	unsigned int opncnt;
+	int avbs, frbs;
 	char name[RTF_NAMELEN+1];
 };
 
@@ -90,6 +91,8 @@ struct rt_fifo_get_info_struct{
 #define _PUT_IF        13
 #define _GET_IF        14
 #define _NAMED_CREATE  15
+#define _AVBS          16
+#define _FRBS          17
 
 #ifdef __KERNEL__
 
@@ -105,6 +108,8 @@ void __rtai_fifos_exit(void);
 
 int rtf_init(void);
 
+typedef int (*rtf_handler_t)(unsigned int fifo, int rw);
+
 /* Attach a handler to an RT-FIFO.
  *
  * Allow function handler to be called when a user process reads or writes to 
@@ -113,7 +118,7 @@ int rtf_init(void);
  */
 
 int rtf_create_handler(unsigned int fifo,	/* RT-FIFO */
-		       int (*handler)(unsigned int fifo)	/* function to be called */);
+		       void *handler		/* function to be called */);
 
 
 /**
@@ -128,7 +133,7 @@ int rtf_create_handler(unsigned int fifo,	/* RT-FIFO */
  * to allow the user to easily understand if the handler was called at fifo
  * read (@a rw is 'r') or write (rw is 'w').
  */
-#define X_FIFO_HANDLER(handler) ((int (*)(unsigned int))(handler))
+#define X_FIFO_HANDLER(handler) ((int (*)(unsigned int, int rw))(handler))
 
 /* Create an RT-FIFO.
  * 
@@ -283,6 +288,13 @@ RTAI_SYSCALL_MODE int rtf_sem_destroy(unsigned int fifo	/* RT-FIFO */);
 
 #define rtf_sem_delete rtf_sem_destroy
 
+
+/* Get an RT-FIFO free bytes in buffer.
+ *
+ */
+
+RTAI_SYSCALL_MODE int rtf_get_frbs(unsigned int fifo /* RT-FIFO */);
+
 /* Just for compatibility with earlier rtai_fifos releases. No more bh and user
 buffers. Fifos are now awakened immediately and buffers > 128K are vmalloced */
 
@@ -359,6 +371,18 @@ RTAI_PROTO(int, rtf_get_if,(unsigned int fifo, void *buf, int count))
 		memcpy(buf, lbuf, retval);
 	}
 	return retval;
+}
+
+RTAI_PROTO(int, rtf_get_avbs, (unsigned int fifo))
+{
+	struct { unsigned long fifo; } arg = { fifo };
+	return rtai_lxrt(FUN_FIFOS_LXRT_INDX, SIZARG, _AVBS, &arg).i[LOW];
+}
+
+RTAI_PROTO(int, rtf_get_frbs, (unsigned int fifo))
+{
+	struct { unsigned long fifo; } arg = { fifo };
+	return rtai_lxrt(FUN_FIFOS_LXRT_INDX, SIZARG, _FRBS, &arg).i[LOW];
 }
 
 RTAI_PROTO(int, rtf_reset_lxrt,(unsigned int fifo))

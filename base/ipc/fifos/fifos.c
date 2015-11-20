@@ -211,14 +211,14 @@ typedef struct rt_fifo_struct {
 	int pol_asyn_pended;
 	wait_queue_head_t pollq;
 	struct fasync_struct *asynq;
-	int (*handler)(unsigned int arg);
+	rtf_handler_t handler;
 	F_SEM sem;
 	char name[RTF_NAMELEN+1];
 } FIFO;
 
 static int fifo_srq, async_sig;
-static spinlock_t rtf_lock = SPIN_LOCK_UNLOCKED;
-static spinlock_t rtf_name_lock = SPIN_LOCK_UNLOCKED;
+static DEFINE_SPINLOCK(rtf_lock);
+static DEFINE_SPINLOCK(rtf_name_lock);
 
 #define MAX_FIFOS 64
 //static FIFO fifo[MAX_FIFOS] = {{{0}}};
@@ -228,7 +228,7 @@ static FIFO *fifo;
 static struct { int in, out; struct task_struct *task[MAXREQS]; } taskq;
 static struct { int in, out; FIFO *fifo[MAXREQS]; } pol_asyn_q;
 
-static int do_nothing(unsigned int arg) { return 0; }
+static int do_nothing(unsigned int arg, int rw) { return 0; }
 
 static inline void enqueue_blocked(LX_TASK *task, F_QUEUE *queue, int qtype, int priority)
 {
@@ -605,7 +605,7 @@ static inline int mbx_delete(F_MBX *mbx)
 	return 0;
 }
 
-static inline int mbx_send(F_MBX *mbx, void *msg, int msg_size, int lnx)
+static inline int mbx_send(F_MBX *mbx, const char *msg, int msg_size, int lnx)
 {
 	if (mbx_sem_wait(&(mbx->sndsem))) {
 		return msg_size;
@@ -622,7 +622,7 @@ static inline int mbx_send(F_MBX *mbx, void *msg, int msg_size, int lnx)
 	return 0;
 }
 
-static inline int mbx_send_wp(F_MBX *mbx, void *msg, int msg_size, int lnx)
+static inline int mbx_send_wp(F_MBX *mbx, const char *msg, int msg_size, int lnx)
 {
 	unsigned long flags;
 
@@ -639,7 +639,7 @@ static inline int mbx_send_wp(F_MBX *mbx, void *msg, int msg_size, int lnx)
 	return msg_size;
 }
 
-static inline int mbx_send_if(F_MBX *mbx, void *msg, int msg_size, int lnx)
+static inline int mbx_send_if(F_MBX *mbx, const char *msg, int msg_size, int lnx)
 {
 	unsigned long flags;
 
@@ -656,7 +656,7 @@ static inline int mbx_send_if(F_MBX *mbx, void *msg, int msg_size, int lnx)
 	return msg_size;
 }
 
-static int mbx_send_timed(F_MBX *mbx, void *msg, int msg_size, int delay, int lnx)
+static int mbx_send_timed(F_MBX *mbx, const char *msg, int msg_size, int delay, int lnx)
 {
 	if (mbx_sem_wait_timed(&(mbx->sndsem), delay)) {
 		return msg_size;
@@ -1074,7 +1074,7 @@ RTAI_SYSCALL_MODE int rtf_destroy(unsigned int minor)
  * or not. The next call of rtf_create will uninstall the handler just
  * "installed".
  */
-int rtf_create_handler(unsigned int minor, int (*handler) (unsigned int fifo))
+int rtf_create_handler(unsigned int minor, void *handler)
 {
 	if (minor >= MAX_FIFOS || !handler) {
 		return -EINVAL;
@@ -1135,6 +1135,18 @@ RTAI_SYSCALL_MODE int rtf_put_if(unsigned int minor, void *buf, int count)
 
 	count -= mbx_send_if(&(fifo[minor].mbx), buf, count, 0);
 	return count;
+}
+
+RTAI_SYSCALL_MODE int rtf_get_avbs(unsigned int minor)
+{
+	VALID_FIFO;
+	return fifo[minor].mbx.avbs;
+}
+
+RTAI_SYSCALL_MODE int rtf_get_frbs(unsigned int minor)
+{
+	VALID_FIFO;
+	return fifo[minor].mbx.frbs;
 }
 
 /**
@@ -1362,7 +1374,7 @@ static ssize_t rtf_read(struct file *filp, char *buf, size_t count, loff_t* ppos
 
 	if (count) {
 		inode->i_atime = CURRENT_TIME;
-		if ((handler_ret = ((int (*)(int, ...))(fifo[minor].handler))(minor, 'r')) < 0) {
+		if ((handler_ret = (fifo[minor].handler)(minor, 'r')) < 0) {
 			return handler_ret;
 		}
 	}
@@ -1388,7 +1400,7 @@ static ssize_t rtf_write(struct file *filp, const char *buf, size_t count, loff_
 	}
 
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
-	if ((handler_ret = ((int (*)(int, ...))(fifo[minor].handler))(minor, 'w')) < 0) {
+	if ((handler_ret = (fifo[minor].handler)(minor, 'w')) < 0) {
 		return handler_ret;
 	}
 
@@ -1397,8 +1409,14 @@ static ssize_t rtf_write(struct file *filp, const char *buf, size_t count, loff_
 
 #define DELAY(x) (((x)*HZ + 500)/1000)
 
+#ifdef HAVE_UNLOCKED_IOCTL
+static long rtf_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	struct inode *inode = filp->f_dentry->d_inode;
+#else
 static int rtf_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg)
-{	
+{
+#endif
 	unsigned int minor;
 	FIFO *fifop;
 
@@ -1433,7 +1451,8 @@ static int rtf_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, u
 			args.count -= mbx_receive(&(fifop->mbx), args.buf, args.count, 1);
 			if (args.count) {
 				inode->i_atime = CURRENT_TIME;
-				if ((handler_ret = ((int (*)(int, ...))(fifo[minor].handler))(minor, 'r')) < 0) {
+				if ((handler_ret = (fifo[minor].handler)(minor,
+'r')) < 0) {
 					return handler_ret;
 				}
 				return args.count;
@@ -1461,7 +1480,7 @@ static int rtf_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, u
 			if (args.count) {
 				inode->i_atime = CURRENT_TIME;
 //				if ((handler_ret = (fifop->handler)(minor)) < 0) {
-				if ((handler_ret = ((int (*)(int, ...))(fifo[minor].handler))(minor, 'r')) < 0) {
+				if ((handler_ret = (fifop->handler)(minor, 'r')) < 0) {
 					return handler_ret;
 				}
 				return args.count;
@@ -1475,7 +1494,7 @@ static int rtf_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, u
 			args.count -= mbx_receive_if(&(fifop->mbx), args.buf, args.count, 1);
 			if (args.count) {
 				inode->i_atime = CURRENT_TIME;
-				if ((handler_ret = ((int (*)(int, ...))(fifo[minor].handler))(minor, 'r')) < 0) {
+				if ((handler_ret = (fifo[minor].handler)(minor, 'r')) < 0) {
 					return handler_ret;
 				}
 				return args.count;
@@ -1497,7 +1516,7 @@ static int rtf_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, u
 			}
 			inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 //			if ((handler_ret = (fifop->handler)(minor)) < 0) {
-			if ((handler_ret = ((int (*)(int, ...))(fifo[minor].handler))(minor, 'w')) < 0) {
+			if ((handler_ret = (fifop->handler)(minor, 'w')) < 0) {
 				return handler_ret;
 			}
 			return args.count;
@@ -1513,7 +1532,8 @@ static int rtf_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, u
 				}
 			}
 			inode->i_ctime = inode->i_mtime = CURRENT_TIME;
-			if ((handler_ret = ((int (*)(int, ...))(fifo[minor].handler))(minor, 'w')) < 0) {
+			if ((handler_ret = (fifo[minor].handler)(minor, 'w')) <
+0) {
 				return handler_ret;
 			}
 			return args.count;
@@ -1579,6 +1599,8 @@ static int rtf_ioctl(struct inode *inode, struct file *filp, unsigned int cmd, u
 				info.fifo_number = i;
 				info.size        = fifo[i].mbx.size;
 				info.opncnt      = fifo[i].opncnt;
+				info.avbs        = fifo[i].mbx.avbs;
+				info.frbs        = fifo[i].mbx.frbs;
 				strncpy(info.name, fifo[i].name, RTF_NAMELEN+1);
 				rt_copy_to_user(req.ptr + n, &info, sizeof(info));
 			}
@@ -1645,7 +1667,11 @@ static struct file_operations rtf_fops =
 	read:		rtf_read,
 	write:		rtf_write,
 	poll:		rtf_poll,
+#ifdef HAVE_UNLOCKED_IOCTL
+	unlocked_ioctl:	rtf_ioctl,
+#else
 	ioctl:		rtf_ioctl,
+#endif
 	open:		rtf_open,
 	release:	rtf_release,
 	fasync:		rtf_fasync,
@@ -1680,7 +1706,9 @@ static struct rt_fun_entry rtai_fifos_fun[] = {
 	[_GETBY_NAME]   = { 0, rtf_getfifobyname },
 	[_OVERWRITE]    = { 0, rtf_ovrwr_put },
 	[_PUT_IF]       = { 0, rtf_put_if },
-	[_GET_IF]       = { 0, rtf_get_if }
+	[_GET_IF]       = { 0, rtf_get_if },
+	[_AVBS]         = { 0, rtf_get_avbs },
+	[_FRBS]         = { 0, rtf_get_frbs }
 };
 
 static int register_lxrt_fifos_support(void)
@@ -1790,66 +1818,46 @@ module_exit(__rtai_fifos_exit);
 #ifdef CONFIG_PROC_FS
 /* ----------------------< proc filesystem section >----------------------*/
 
-static int rtai_read_fifos(char* buf, char** start, off_t offset,
-	int len, int *eof, void *data)
+static int PROC_READ_FUN(rtai_read_fifos) 
 {
 	int i;
+	PROC_PRINT_VARS;
 
-	len = sprintf(buf, "RTAI Real Time fifos status.\n\n" );
-	if (len > LIMIT) {
-		return(len);
-	}
-	len += sprintf(buf + len, "Maximum number of FIFOS %d.\n\n", MaxFifos);
-	if (len > LIMIT) {
-		return(len);
-	}
-	len += sprintf(buf+len, "fifo No  Open Cnt  Buff Size  handler  malloc type");
-	if (len > LIMIT) {
-		return(len);
-	}
-	len += sprintf(buf+len, " Name\n----------------");
-	if (len > LIMIT) {
-		return(len);
-	}
-	len += sprintf(buf+len, "-----------------------------------------\n");
-	if (len > LIMIT) {
-		return(len);
-	}
+	PROC_PRINT("RTAI Real Time fifos status.\n\n");
+	PROC_PRINT("Maximum number of FIFOS %d.\n\n", MaxFifos);
+	PROC_PRINT("fifo No  Open Cnt  Buff Size  handler  malloc type");
+	PROC_PRINT(" Name\n----------------");
+	PROC_PRINT("-----------------------------------------\n");
 /*
  * Display the status of all open RT fifos.
  */
 	for (i = 0; i < MAX_FIFOS; i++) {
 		if (fifo[i].opncnt > 0) {
-			len += sprintf( buf+len, "%-8d %-9d %-10d %-10p %-12s", i,
+			PROC_PRINT("%-8d %-9d %-10d %-10p %-12s", i,
                         	        fifo[i].opncnt, fifo[i].mbx.size,
 					fifo[i].handler,
 					fifo[i].malloc_type == 'v'
 					    ? "vmalloc" : "kmalloc" 
 					);
-			if (len > LIMIT) {
-				return(len);
-			}
-			len += sprintf(buf+len, "%s\n", fifo[i].name);
-			if (len > LIMIT) {
-				return(len);
-			}
+			PROC_PRINT("%s\n", fifo[i].name);
 		} /* End if - fifo is open. */
 	} /* End for loop - loop for all fifos. */
-	return len;
+	return 0;
 
 }  /* End function - rtai_read_fifos */
+
+PROC_READ_OPEN_OPS(rtai_fifos_fops, rtai_read_fifos);
 
 static int rtai_proc_fifo_register(void) 
 {
         struct proc_dir_entry *proc_fifo_ent;
-        proc_fifo_ent = create_proc_entry("fifos", S_IFREG|S_IRUGO|S_IWUSR, 
-								rtai_proc_root);
+        proc_fifo_ent = CREATE_PROC_ENTRY("fifos", S_IFREG|S_IRUGO|S_IWUSR, rtai_proc_root, &rtai_fifos_fops);
         if (!proc_fifo_ent) {
                 printk("Unable to initialize /proc/rtai/fifos\n");
                 return(-1);
         }
-        proc_fifo_ent->read_proc = rtai_read_fifos;
-	return 0;
+	SET_PROC_READ_ENTRY(proc_fifo_ent, rtai_read_fifos);
+	PROC_PRINT_DONE;
 }
 
 static void rtai_proc_fifo_unregister(void) 
@@ -1924,6 +1932,8 @@ EXPORT_SYMBOL(rtf_getfifobyname);
 EXPORT_SYMBOL(rtf_ovrwr_put);
 EXPORT_SYMBOL(rtf_put);
 EXPORT_SYMBOL(rtf_put_if);
+EXPORT_SYMBOL(rtf_get_avbs);
+EXPORT_SYMBOL(rtf_get_frbs);
 EXPORT_SYMBOL(rtf_reset);
 EXPORT_SYMBOL(rtf_resize);
 EXPORT_SYMBOL(rtf_sem_destroy);
