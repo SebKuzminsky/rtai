@@ -1,3 +1,14 @@
+rtai (4.1.6.g31d2698) jessie; urgency=low
+
+  * fixup the rtai math support
+  * notes on how i build rtai for linuxcnc
+  * deb: generate debian/rules, control, and changelog dynamically
+  * RTAI: copy base/math/export_newlib.h from RTAI CVS Magma
+  * update to RTAI 4.1
+  * add deb files from lucid rtai_3.8.1 package
+
+ -- Sebastian Kuzminsky <seb@highlab.com>  Fri, 20 Nov 2015 13:57:44 -0700
+
 rtai (4.1) UNRELEASED; urgency=medium
 
   * Update to RTAI 4.1 by Paolo Mantegazza.
