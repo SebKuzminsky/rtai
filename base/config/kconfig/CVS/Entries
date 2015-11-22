@@ -1,0 +1,22 @@
+/Makefile.kconfig/1.5/Tue Oct 22 14:54:15 2013//
+/conf.c/1.1/Fri Mar 18 08:57:24 2005//
+/confdata.c/1.1/Fri Mar 18 08:57:24 2005//
+/expr.c/1.1/Fri Mar 18 08:57:24 2005//
+/expr.h/1.1/Fri Mar 18 08:57:24 2005//
+/gconf.c/1.1/Fri Mar 18 08:57:24 2005//
+/gconf.glade/1.1/Fri Mar 18 08:57:24 2005//
+/images.c/1.1/Fri Mar 18 08:57:24 2005//
+/kconfig_load.c/1.1/Fri Mar 18 08:57:24 2005//
+/lex.zconf.c_shipped/1.1/Fri Mar 18 08:57:24 2005//
+/lkc.h/1.1/Fri Mar 18 08:57:24 2005//
+/lkc_proto.h/1.1/Fri Mar 18 08:57:24 2005//
+/mconf.c/1.2/Thu Dec 22 11:07:07 2005//
+/menu.c/1.1/Fri Mar 18 08:57:24 2005//
+/qconf.cc/1.1/Fri Mar 18 08:57:24 2005//
+/qconf.h/1.2/Fri Dec 14 10:06:40 2007//
+/symbol.c/1.1/Fri Mar 18 08:57:24 2005//
+/zconf.l/1.1/Fri Mar 18 08:57:24 2005//
+/zconf.tab.c_shipped/1.1/Fri Mar 18 08:57:24 2005//
+/zconf.tab.h_shipped/1.1/Fri Mar 18 08:57:24 2005//
+/zconf.y/1.1/Fri Mar 18 08:57:24 2005//
+D
