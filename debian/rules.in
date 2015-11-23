@@ -50,7 +50,7 @@ build: build-stamp
 build-stamp:
 	dh_testdir
 	./configure $(CONFIGURE)
-	$(MAKE)
+	$(MAKE) V=1
 	touch build-stamp
 
 clean:
