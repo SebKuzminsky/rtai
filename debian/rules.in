@@ -1,12 +1,11 @@
 #!/usr/bin/make -f
 
-# set this for the kernel you want to build for
-# FIXME: poke this into debian/control too
+# This gets set by debian/configure to the kernel we're building for.
 KERNEL_VER = @KERNEL_VERSION@
 
 KERNEL_DIR = /usr/src/linux-headers-$(KERNEL_VER)
 
-ARCH=i386
+ARCH=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
 
 CONFIGURE := --enable-shm
 CONFIGURE += --enable-sem
@@ -39,7 +38,6 @@ CONFIGURE += --with-linux-dir=$(KERNEL_DIR)
 CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VER)
 
 CONFIGURE += --host $(ARCH)
-#CONFIGURE += --host $(dpkg-architecture -qDEB_BUILD_ARCH)
 
 # These are configure variables the RTAI 4.1 needs, but that it doesn't have command-line arguments for...
 # This selects the installed version of the glibc libm.a as the code for the in-kernel math library...
