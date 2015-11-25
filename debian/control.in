@@ -2,7 +2,7 @@ Source: rtai
 Section: misc
 Priority: extra
 Maintainer: Sebastian Kuzminsky <seb@highlab.com>
-Build-Depends: debhelper, linux-headers-@KERNEL_VERSION@
+Build-Depends: debhelper, newlib-source, linux-headers-@KERNEL_VERSION@
 
 Package: rtai-modules-@KERNEL_VERSION@
 Provides: rtai-modules

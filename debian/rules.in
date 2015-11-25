@@ -39,17 +39,39 @@ CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VER)
 
 CONFIGURE += --host $(ARCH)
 
-# These are configure variables the RTAI 4.1 needs, but that it doesn't have command-line arguments for...
-# This selects the installed version of the glibc libm.a as the code for the in-kernel math library...
-CONFIGURE += CONFIG_RTAI_MATH_LIBM_TO_USE=3
-CONFIGURE += CONFIG_RTAI_MATH_LIBM_DIR=/usr/lib/$(ARCH)-linux-gnu
+# These are configure variables that RTAI 5 needs, but that its configure
+# script doesn't have command-line arguments for.  These settings select
+# newlib for the in-kernel math library (newlib is built as part of the
+# rtai-modules build).
+CONFIGURE += CONFIG_RTAI_MATH_LIBM_TO_USE=1
+CONFIGURE += CONFIG_RTAI_MATH_LIBM_DIR=/tmp/newlib/build/libm/libm.a
+
+
+ifeq ($(ARCH),i386)
+    NEWLIB_CONFIGURE=--disable-shared --disable-multilib --host=i386-pc-sysv CFLAGS="-O2"
+else ifeq ($(ARCH),amd64)
+    NEWLIB_CONFIGURE=--disable-shared --disable-multilib --host=x86_64-pc-none CFLAGS="-O2 -mcmodel=kernel",
+endif
+
 
 build: build-stamp
 build-stamp:
 	dh_testdir
+
+	# first build newlib
+	mkdir -p /tmp/newlib/build
+	(cd /tmp/newlib; tar -vxJf /usr/src/newlib/newlib-*.tar.xz)
+	( \
+		cd /tmp/newlib/build; \
+		/tmp/newlib/newlib-*/newlib/configure $(NEWLIB_CONFIGURE); \
+		make; \
+		find . -name libm.a; \
+	)
+
 	./configure $(CONFIGURE)
 	$(MAKE) V=1
 	touch build-stamp
+
 
 clean:
 	dh_testdir
