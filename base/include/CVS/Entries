@@ -37,4 +37,7 @@
 /rtai_version.h/1.1/Fri Mar 18 08:57:24 2005//
 /rtai_wd.h/1.5/Thu Sep 25 13:05:54 2008//
 /rtai_wrappers.h/1.22/Tue Oct 22 14:54:15 2013//
-D
+D/asm-arm////
+D/asm-m68k////
+D/asm-ppc////
+D/asm-x86////

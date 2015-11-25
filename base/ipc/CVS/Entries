@@ -1,3 +1,11 @@
 /GNUmakefile.am/1.2/Sat Mar  8 10:24:57 2008//
 /GNUmakefile.in/1.20/Thu Jan 15 10:14:14 2015//
-D
+D/bits////
+D/fifos////
+D/mbx////
+D/mq////
+D/msg////
+D/netrpc////
+D/sem////
+D/shm////
+D/tbx////

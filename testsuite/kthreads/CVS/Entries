@@ -1,3 +1,5 @@
 /GNUmakefile.am/1.1/Wed Oct 28 19:23:35 2015//
 /GNUmakefile.in/1.1/Wed Oct 28 19:23:35 2015//
-D
+D/latency////
+D/preempt////
+D/switches////

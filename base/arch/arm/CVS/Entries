@@ -2,4 +2,5 @@
 /GNUmakefile.in/1.19/Thu Jan 15 10:14:13 2015//
 /Kconfig/1.12/Thu Oct 29 11:48:51 2015//
 /defconfig/1.10/Thu Oct 29 11:48:51 2015//
-D
+D/hal////
+D/patches////

@@ -1,7 +1,6 @@
-A D/asm-arm////
 A D/asm-i386////
-A D/asm-m68k////
 A D/asm-m68knommu////
-A D/asm-ppc////
-A D/asm-x86////
 A D/asm-x86_64////
+R D/asm-x86_64////
+R D/asm-m68knommu////
+R D/asm-i386////

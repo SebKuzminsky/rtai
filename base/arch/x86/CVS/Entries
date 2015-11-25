@@ -2,4 +2,6 @@
 /GNUmakefile.in/1.3/Thu Jan 15 10:14:13 2015//
 /Kconfig/1.11/Sat Nov 14 16:08:54 2015//
 /defconfig/1.6/Thu Oct 29 11:48:51 2015//
-D
+D/calibration////
+D/hal////
+D/patches////
