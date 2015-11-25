@@ -49,8 +49,8 @@ int main(int argc, char *argv[])
 
 	signal(SIGINT, endme);
 
-	if ((procfile = fopen("/proc/rtai/latency_calibrate", "r")) == NULL) {
-		printf("Warning: Error opening /proc/rtai/latency_calibrate\n");
+	if ((procfile = fopen("/proc/rtai/kern_latency_calibrate", "r")) == NULL) {
+		printf("Warning: Error opening /proc/rtai/kern_latency_calibrate\n");
 		printf("         Couldn't get infos about the module's state.\n");
 	} else {
 		while (fgets(line,256,procfile) != NULL) {printf("%s",line);}
