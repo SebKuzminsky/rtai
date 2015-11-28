@@ -50,7 +50,7 @@ CONFIGURE += CONFIG_RTAI_MATH_LIBM_DIR=/tmp/newlib/build/libm/libm.a
 ifeq ($(ARCH),i386)
     NEWLIB_CONFIGURE=--disable-shared --disable-multilib --host=i386-pc-sysv CFLAGS="-O2"
 else ifeq ($(ARCH),amd64)
-    NEWLIB_CONFIGURE=--disable-shared --disable-multilib --host=x86_64-pc-none CFLAGS="-O2 -mcmodel=kernel",
+    NEWLIB_CONFIGURE=--disable-shared --disable-multilib --host=x86_64-pc-none CFLAGS="-O2 -mcmodel=kernel"
 endif
 
 
