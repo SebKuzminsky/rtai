@@ -134,6 +134,7 @@ char *d2str(double d, int dgt, char *str)
 	} else {
 		str[i + 1] = '+';
 	}
+	
 	i = i + sprintf(&str[i + 2], "%d", e + (l/p >= 1));
 	str[i + 2] = 0;
 	return str;
