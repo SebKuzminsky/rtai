@@ -4,7 +4,7 @@
 /export_glibc.h/1.1/Thu Jan 15 10:14:18 2015//
 /export_newlib.h/1.1/Thu Apr 30 20:42:39 2015//
 /export_uclibc.h/1.1/Thu Apr 30 20:42:39 2015//
-/export_musl.h/1.1/Sun Nov 29 16:23:04 2015//
-/README.KLIBM/1.10/Wed Dec  2 20:32:44 2015//
-/libm.c/1.10/Wed Dec  2 20:32:44 2015//
+/README.KLIBM/1.11/Thu Dec  3 15:38:13 2015//
+/export_musl.h/1.2/Thu Dec  3 15:38:13 2015//
+/libm.c/1.12/Thu Dec  3 15:38:13 2015//
 D
