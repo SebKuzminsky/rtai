@@ -7,8 +7,6 @@
 /README.SMI/1.1/Mon Dec 19 09:56:25 2005//
 /README.maintainer/1.5/Thu Oct 10 08:14:43 2013//
 /aclocal.m4/1.9/Wed Jan 14 09:21:45 2015//
-/configure/1.96/Wed Oct 28 19:27:06 2015//
-/configure.in/1.96/Wed Oct 28 19:27:06 2015//
 /makefile/1.6/Tue Oct 22 14:54:14 2013//
 /rtai_config.h.in/1.19/Wed Oct 28 19:23:29 2015//
 D/addons////
@@ -17,4 +15,6 @@ D/doc////
 D/rtai-lab////
 D/rtai-py////
 D/testsuite////
-/ChangeLog/1.515/Thu Dec  3 15:38:11 2015//
+/ChangeLog/1.518/Sun Dec  6 16:10:24 2015//
+/configure/1.99/Sun Dec  6 16:10:24 2015//
+/configure.in/1.99/Sun Dec  6 16:10:24 2015//
