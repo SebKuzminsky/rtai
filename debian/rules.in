@@ -43,7 +43,10 @@ CONFIGURE += --disable-rtdm
 #CONFIGURE += --disable-dbx
 
 CONFIGURE += --with-linux-dir=$(KERNEL_DIR)
+
 CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VERSION)-$(FEATURESET)-$(FLAVOR)
+CONFIGURE += --libdir=/usr/lib
+CONFIGURE += --includedir=/usr/include/rtai
 
 CONFIGURE += --host=$(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 
