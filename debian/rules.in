@@ -94,7 +94,7 @@ install: build
 	mkdir -p debian/tmp/etc/udev/rules.d
 	$(MAKE) install DESTDIR=`pwd`/debian/tmp
 	install -d debian/tmp/usr/share/doc/rtai-modules-$(KERNEL_VERSION)
-	tar --exclude CVS --exclude 'GNUmakefile*' -vcf - ChangeLog README.* doc | (cd debian/tmp/usr/share/doc/rtai-modules-$(KERNEL_VERSION); tar -xf -)
+	tar --exclude CVS --exclude 'GNUmakefile*' -cf - ChangeLog README.* doc | (cd debian/tmp/usr/share/doc/rtai-modules-$(KERNEL_VERSION); tar -xf -)
 	(cd debian/tmp; find -not -type d) > debian/rtai-modules-$(KERNEL_VERSION).files
 	dh_movefiles
 
