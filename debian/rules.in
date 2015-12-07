@@ -45,7 +45,7 @@ CONFIGURE += --disable-rtdm
 CONFIGURE += --with-linux-dir=$(KERNEL_DIR)
 CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VERSION)-$(FEATURESET)-$(FLAVOR)
 
-CONFIGURE += --host $(ARCH)
+CONFIGURE += --host=$(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 
 # These are configure variables that RTAI 5 needs, but that its configure
 # script doesn't have command-line arguments for.  These settings select
