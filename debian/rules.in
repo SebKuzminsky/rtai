@@ -70,9 +70,9 @@ build: build-stamp
 build-stamp:
 	dh_testdir
 
-	# first build newlib
+	# build newlib
 	mkdir -p /tmp/newlib/build
-	(cd /tmp/newlib; tar -vxJf /usr/src/newlib/newlib-*.tar.xz)
+	(cd /tmp/newlib; tar -xJf /usr/src/newlib/newlib-*.tar.xz)
 	( \
 		cd /tmp/newlib/build; \
 		/tmp/newlib/newlib-*/newlib/configure $(NEWLIB_CONFIGURE); \
@@ -80,6 +80,7 @@ build-stamp:
 		find . -name libm.a; \
 	)
 
+	# build rtai
 	./configure $(CONFIGURE)
 	$(MAKE) V=1
 	touch build-stamp
