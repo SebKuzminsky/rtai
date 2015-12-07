@@ -13,7 +13,8 @@ FLAVOR=$(shell basename $(KERNEL_DIR) | sed -re 's/^linux-headers-$(KERNEL_VERSI
 
 KERNEL_DIR = $(shell ls -1d /usr/src/linux-headers-$(KERNEL_VERSION)-$(FEATURESET)-*)
 
-ARCH=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
+ARCH = $(shell dpkg-architecture -qDEB_BUILD_ARCH)
+HOST = $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
 
 CONFIGURE := --enable-shm
 CONFIGURE += --enable-sem
@@ -48,7 +49,7 @@ CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VERSION)-$(FEATURESET)-$(FLAVOR)
 CONFIGURE += --libdir=/usr/lib
 CONFIGURE += --includedir=/usr/include/rtai
 
-CONFIGURE += --host=$(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+CONFIGURE += --host=$(HOST)
 
 # These are configure variables that RTAI 5 needs, but that its configure
 # script doesn't have command-line arguments for.  These settings select
