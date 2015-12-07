@@ -1,9 +1,14 @@
 #!/usr/bin/make -f
 
-# This gets set by debian/configure to the kernel we're building for.
-KERNEL_VER = @KERNEL_VERSION@
+# This gets set by debian/configure to the version of the kernel image
+# we're building for, for example "3.16.0-9".
+KERNEL_VERSION = @KERNEL_VERSION@
 
-KERNEL_DIR = /usr/src/linux-headers-$(KERNEL_VER)
+# This gets set to the featureset of the kernel image, probably "rtai".
+FEATURESET = @FEATURESET@
+
+KERNEL_DIR = $(shell ls -1d /usr/src/linux-headers-$(KERNEL_VERSION)-$(FEATURESET)-*)
+FLAVOR=$(shell basename $(KERNEL_DIR) | sed -re 's/^linux-headers-$(KERNEL_VERSION)-$(FEATURESET)-//')
 
 ARCH=$(shell dpkg-architecture -qDEB_BUILD_ARCH)
 
@@ -35,7 +40,7 @@ CONFIGURE += --disable-rtdm
 #CONFIGURE += --disable-dbx
 
 CONFIGURE += --with-linux-dir=$(KERNEL_DIR)
-CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VER)
+CONFIGURE += --prefix=/usr/realtime-$(KERNEL_VERSION)-$(FEATURESET)-$(FLAVOR)
 
 CONFIGURE += --host $(ARCH)
 
@@ -75,7 +80,7 @@ build-stamp:
 
 clean:
 	dh_testdir
-	rm -f build-stamp debian/rtai-modules-$(KERNEL_VER).files
+	rm -f build-stamp debian/rtai-modules-$(KERNEL_VERSION).files
 	#./configure $(CONFIGURE)
 	#$(MAKE) distclean -s
 	dh_clean
@@ -88,10 +93,9 @@ install: build
 	mkdir -p debian/tmp
 	mkdir -p debian/tmp/etc/udev/rules.d
 	$(MAKE) install DESTDIR=`pwd`/debian/tmp
-	install -d debian/tmp/usr/share/doc/rtai-modules-$(KERNEL_VER)
-	tar --exclude CVS --exclude 'GNUmakefile*' -vcf - ChangeLog README.* doc | (cd debian/tmp/usr/share/doc/rtai-modules-$(KERNEL_VER); tar -xf -)
-	mkdir -p debian/tmp/lib/modules/$(KERNEL_VER)
-	(cd debian/tmp; find -not -type d) > debian/rtai-modules-$(KERNEL_VER).files
+	install -d debian/tmp/usr/share/doc/rtai-modules-$(KERNEL_VERSION)
+	tar --exclude CVS --exclude 'GNUmakefile*' -vcf - ChangeLog README.* doc | (cd debian/tmp/usr/share/doc/rtai-modules-$(KERNEL_VERSION); tar -xf -)
+	(cd debian/tmp; find -not -type d) > debian/rtai-modules-$(KERNEL_VERSION).files
 	dh_movefiles
 
 binary: binary-indep binary-arch
