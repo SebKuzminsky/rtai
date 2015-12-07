@@ -99,8 +99,12 @@ install: build
 	mkdir -p debian/tmp
 	mkdir -p debian/tmp/etc/udev/rules.d
 	$(MAKE) install DESTDIR=`pwd`/debian/tmp
+
+	# move the docs around (rtai 5.0-test1 does not honor --docdir)
 	install -d debian/tmp/usr/share/doc/rtai-modules-$(KERNEL_VERSION)
-	tar --exclude CVS --exclude 'GNUmakefile*' -cf - ChangeLog README.* doc | (cd debian/tmp/usr/share/doc/rtai-modules-$(KERNEL_VERSION); tar -xf -)
+	mv debian/tmp/usr/realtime-$(KERNEL_VERSION)-$(FEATURESET)-$(FLAVOR)/share/doc/*/* debian/tmp/usr/share/doc/rtai-modules-$(KERNEL_VERSION)/
+	cp ChangeLog README.* debian/tmp/usr/share/doc/rtai-modules-$(KERNEL_VERSION)
+
 	(cd debian/tmp; find -not -type d) > debian/rtai-modules-$(KERNEL_VERSION).files
 	dh_movefiles
 
