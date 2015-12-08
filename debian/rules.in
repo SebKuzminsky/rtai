@@ -76,8 +76,7 @@ build-stamp:
 	( \
 		cd /tmp/newlib/build; \
 		/tmp/newlib/newlib-*/newlib/configure $(NEWLIB_CONFIGURE); \
-		make; \
-		find . -name libm.a; \
+		make && find . -name libm.a; \
 	)
 
 	# build rtai
