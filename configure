@@ -19836,7 +19836,7 @@ case $RTAI_TARGET_ARCH in
 	# `-msse2' temporarily removed by Pierangelo Masarati
 	# as suggested by Paul <paul_c AT tuxcnc DOT org>
 	# RTAI_TARGET_ARCH_OPTS="$RTAI_TARGET_ARCH_OPTS -msse"
-	RTAI_TARGET_ARCH_OPTS="$RTAI_TARGET_ARCH_OPTS -msse -mpreferred-stack-boundary=4"
+	RTAI_TARGET_ARCH_OPTS="$RTAI_TARGET_ARCH_OPTS -msse -mpreferred-stack-boundary=4 -fno-builtin-sin -fno-builtin-cos"
         ;;
    esac
    ;;
