@@ -32,7 +32,6 @@ CONFIGURE += --enable-math-c99
 
 CONFIGURE += --enable-cpus=8
 
-CONFIGURE += --enable-lxrt-use-linux-syscall
 CONFIGURE += --enable-ktasks-sched-lxrt
 
 CONFIGURE += --disable-leds
