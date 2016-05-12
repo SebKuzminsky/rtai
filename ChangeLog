@@ -1,6 +1,136 @@
+2016-04-29 Pierangelo Masarati <pierangelo.masarati@polimi.it>
+
+	* RTAI 5.0-test2
+
+2016-04-20 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/hal/hal.c: abort compilation if CONFIG_IPIPE_LEGACY,
+	  trivial way to avoid undue confusion and troubles in the use of
+	  RTAI.
+
+2016-04-20 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/calibration/smi-module.c: updated SMI chipset 
+	  list.
+
+2016-04-19 Pierangelo Masarati <pierangelo.masarati@polimi.it>
+
+	* base/arch/x86/calibration/GNUmakefile.am: conditional compilation
+	  of smispv
+	* configure.in: added CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS;
+	  conditional compilation of smispv
+
+2016-04-18 Marco Morandini <marco.morandini@polimi.it>
+
+	* base/arch/x86/calibration/smispv.c: added interactive SMI
+	  supervisor-monitor in user space; requires: libncurses, libpci,
+	  libsensors.
+
+2016-04-11 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/Kconfig: added parameter to chooce latency calibration
+	  metrics.
+	* base/arch/x86/calibration/calibrate.c: calibrate user space latency
+	  according to the chosen metrics.
+	* base/sched/sched.c: calibrate kernel space latency according to the 
+	  chosen metrics.
+	* base/arch/x86/hal/hal.c: set allowed cpus to be portable across 
+	  differing Linux versions, fix printk warnings and linux version 
+	  dependency of cpu_isolated_mask.
+
+2016-04-05 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/calibration/calibrate.c: added a fading memory 
+	  option for the user space latency calibration and an option 
+	  for playing with an alternative Hinf filtering.
+	* base/sched/sched.c: added a fading memory option for the kernel
+	  space latency calibration.
+
+2016-04-04 Pierangelo Masarati <pierangelo.masarati@polimi.it>
+
+	* base/arch/x86/Kconfig, base/arch/x86/defconfig, configure.in: 
+	  redefined self-calibration macros and defaults.
+	* base/sched/sched.c: added Kalman filter based kernel latency 
+	  calibration, as for user space but with integer arithmetics.
+
+2016-04-02 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/calibration/calibrate.c: added a calibration through a
+	  Kalman filter.
+
+2016-03-31 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/calibration/calibrate.c: save the scheduling latencies
+	  in nanoseconds, to make it easier their editing.
+	* base/sched/sched.c: echo diagnose of the scheduling latencies in 
+	  nanoseconds, to make it easier their reading; be sure of the kernel 
+	  thread server end at rmmod rtai_sched.
+
+2016-03-30 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/calibration/calibrate.c: rewrite user space support
+	  for calibrating scheduling latencies on the fly.
+	* base/include/rtai_lxrt.h: recast the kernel_calibrator function 
+	  as a simple interface to provide kernel and user space latencies,
+	  in clock count units.
+	* base/include/rtai_sched.h: add per task calibrated latency variable.
+	* base/include/rtai_schedcore.h: wake up timed tasks, immediately 
+	  accounting for the available per task schedling latency.
+	* base/sched/sched.c: rework the all kernel/user space self calibration
+	  stuff.
+	* base/sched/sys.c: recast the kernel_calibrator function as a simple
+	  interface to provide kernel and user space latencies, in clock count
+	  units.
+
+2016-03-29 Paolo Mantegazza <mantegazza@aero.polimi.it>
+	   Pierangelo Masarati <pierangelo.masarati@polimi.it>
+
+	* base/arch/x86/Kconfig and configure.in: removed old self
+	  calibration parameters, substituted with the new ones,
+	  i.e.: self calibration period and time.
+	* base/sched/GNUmakefile.am: removed old self calibration
+	  stuff
+	* base/include/rtai_defs.h.in and base/include/GNUmakefile.am:
+	  generate macro for installation path
+
+2016-03-28 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* testsuite/user/latency.c: reworked heading lines and added chache 
+          warmup.
+	* testsuite/kthreads/display.c and latency.c: reworked heading lines 
+          and added chache warmup.
+	* testsuite/kern/display.c and latency.c: reworked heading lines and 
+	  added chache warmup.
+
+2016-03-23 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	+* base/sched/sched.c: hard timers started-stopped in the scheduler,
+	  oneshot only, related user calls emptied.
+
+2016-03-12 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* addons/rtdm/rtdm.h: a, likely provisional, fix to support 
+	  Linux-4.x.x.
+
+2016-03-12 Emmanuel Pacaud <emmanuel.pacaud@lapp.in2p3.fr>
+	   Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/sched/sched.c and sys.c: fix the wrong placement of a task
+	  always on all available CPUs when more than 1 is allowed, without
+	  carying of the allowed mask.
+
+2016-03-10 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/ipc/fifos/fifos.c: recover the macro defining f_dentry from 
+	  < LINUX 4.0.0 kernels, to avoid recoding.
+	* base/arch/x86/hal/hal.c: treat cpu_isolated map according to the
+	  kernel version, changed with LINUX 4.x.x.
+	* base/ipc/netrpc/netrpc.c: move rtdm.h inclusion where HARD_NET is
+	  to be used.
+
 2015-12-10 Paolo Mantegazza <mantegazza@aero.polimi.it>
 
-	* base/arch/x86/defconfig: set the use of new error retirn code by 
+	* base/arch/x86/defconfig: set the use of new error return code by 
           default; do not configure COMEDI usage innuser space by default.
 
 2015-12-04 Pierangelo Masarati <pierangelo.masarati@polimi.it>
@@ -908,6 +1038,12 @@
 	  support.
         * base/sched/sched.c: rt_signal_wake_up reverted to wake up on 
 	  Linux signals hanyhow.
+
+2013-07-18 Marco Morandini <marco.morandini@polimi.it>
+
+        * base/arch/x86/calibrate/smispv.c: new interactive SMI supervisor-
+	  monitor, including max overall hardware temperature, to control
+	  possible SMI related abnormal latencies.
 
 2013-07-18 Paolo Mantegazza <mantegazza@aero.polimi.it>
 

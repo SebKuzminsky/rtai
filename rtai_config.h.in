@@ -78,14 +78,14 @@
 /* Kconfig */
 #undef CONFIG_RTAI_HAL_PREEMPT
 
+/* have libsensors */
+#undef CONFIG_RTAI_HAVE_SENSORS
+
 /* Host system alias */
 #undef CONFIG_RTAI_HOST_STRING
 
 /* Kconfig */
 #undef CONFIG_RTAI_IMMEDIATE_LINUX_SYSCALL
-
-/* Kconfig */
-#undef CONFIG_RTAI_INTERNAL_LEDS_SUPPORT
 
 /* Kconfig */
 #undef CONFIG_RTAI_INTERNAL_LXRT_INLINE
@@ -103,10 +103,13 @@
 #undef CONFIG_RTAI_KSTACK_HEAPSZ
 
 /* Kconfig */
-#undef CONFIG_RTAI_LEDS
+#undef CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES
 
 /* Kconfig */
-#undef CONFIG_RTAI_LEDS_BUILTIN
+#undef CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ
+
+/* Kconfig */
+#undef CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS
 
 /* Kconfig */
 #undef CONFIG_RTAI_LONG_TIMED_LIST
@@ -238,9 +241,6 @@
 #undef CONFIG_RTAI_SCHED_ISR_LOCK
 
 /* Kconfig */
-#undef CONFIG_RTAI_SCHED_LATENCY
-
-/* Kconfig */
 #undef CONFIG_RTAI_SCHED_LXRT_NUMSLOTS
 
 /* Kconfig */
@@ -319,6 +319,9 @@
 
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
+
+/* have libpci */
+#undef HAVE_PCI
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #undef HAVE_STDINT_H

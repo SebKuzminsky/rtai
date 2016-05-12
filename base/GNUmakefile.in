@@ -86,7 +86,6 @@ host_triplet = @host@
 @CONFIG_RTAI_TASKLETS_TRUE@am__append_4 = tasklets
 @CONFIG_RTAI_USI_TRUE@am__append_5 = usi
 @CONFIG_RTAI_WD_TRUE@am__append_6 = wd
-@CONFIG_RTAI_LEDS_TRUE@am__append_7 = leds
 subdir = base
 DIST_COMMON = $(srcdir)/GNUmakefile.in $(srcdir)/GNUmakefile.am \
 	$(top_srcdir)/base/config/autoconf/mkinstalldirs
@@ -156,7 +155,7 @@ am__define_uniq_tagged_files = \
 ETAGS = etags
 CTAGS = ctags
 DIST_SUBDIRS = include malloc sched ipc arch posix trace math tasklets \
-	usi wd leds scripts
+	usi wd scripts
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
   dir0=`pwd`; \
@@ -273,6 +272,7 @@ RTAI_BUILTIN_MODLIST = @RTAI_BUILTIN_MODLIST@
 RTAI_COMPAT_CPPFLAGS = @RTAI_COMPAT_CPPFLAGS@
 RTAI_FP_CFLAGS = @RTAI_FP_CFLAGS@
 RTAI_HOST_STRING = @RTAI_HOST_STRING@
+RTAI_INSTALL_DIR = @RTAI_INSTALL_DIR@
 RTAI_KBUILD_BOTTOM = @RTAI_KBUILD_BOTTOM@
 RTAI_KBUILD_CLEAN = @RTAI_KBUILD_CLEAN@
 RTAI_KBUILD_CMD = @RTAI_KBUILD_CMD@
@@ -299,6 +299,7 @@ RTAI_TARGET_SUBARCH = @RTAI_TARGET_SUBARCH@
 RTAI_USER_APP_CFLAGS = @RTAI_USER_APP_CFLAGS@
 RTAI_USER_CFLAGS = @RTAI_USER_CFLAGS@
 SED = @SED@
+SENSORS_LIBS = @SENSORS_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
 STRIP = @STRIP@
@@ -364,7 +365,11 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 OPTDIRS = include $(am__append_1) sched ipc arch posix $(am__append_2) \
 	$(am__append_3) $(am__append_4) $(am__append_5) \
-	$(am__append_6) $(am__append_7)
+	$(am__append_6)
+
+#if CONFIG_RTAI_LEDS
+#OPTDIRS += leds
+#endif
 SUBDIRS = $(OPTDIRS) scripts
 EXTRA_DIST = config
 all: all-recursive

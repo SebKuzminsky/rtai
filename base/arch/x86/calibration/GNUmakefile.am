@@ -5,6 +5,15 @@ modext = @RTAI_MODULE_EXT@
 
 CROSS_COMPILE = @CROSS_COMPILE@
 
+if CONFIG_BUILD_SMISPV
+bin_PROGRAMS = smispv
+smispv_SOURCES = smispv.c
+smispv_LDADD = -lncurses -lpci @SENSORS_LIBS@
+smispv_CPPFLAGS = \
+	-I$(top_srcdir)/base/include \
+	-I../../../include
+endif # CONFIG_BUILD_SMISPV
+
 libcalibrate_rt_a_SOURCES = calibrate-module.c calibrate.h
 libsmi_rt_a_SOURCES = smi-module.c
 
@@ -95,9 +104,14 @@ install-data-local:
 	$(INSTALL_SCRIPT) -m 755 setsmi $(DESTDIR)$(bindir)
 	@$(LN_S) -f $(bindir)/setsmi $(DESTDIR)$(bindir)/rstsmi
 
+if CONFIG_BUILD_SMISPV
+install-data-local:
+	$(INSTALL_SCRIPT) -m 755 smispv $(DESTDIR)$(calibrationdir)
+endif # CONFIG_BUILD_SMISPV
+
 run: all
 	@$(top_srcdir)/rtai-scripts/rtai-load --verbose
 
-EXTRA_DIST = runinfo README.SMI Makefile.kbuild
+EXTRA_DIST = runinfo README.SMI README.SMISPV Makefile.kbuild
 
 DISTCLEANFILES = Makefile

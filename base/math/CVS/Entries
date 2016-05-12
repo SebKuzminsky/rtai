@@ -1,4 +1,3 @@
-/GNUmakefile.am/1.6/Thu Apr 30 20:42:39 2015//
 /Makefile.kbuild/1.3/Tue May  5 12:49:22 2009//
 /export_glibc.h/1.1/Thu Jan 15 10:14:18 2015//
 /export_newlib.h/1.1/Thu Apr 30 20:42:39 2015//
@@ -6,5 +5,6 @@
 /export_musl.h/1.2/Thu Dec  3 15:38:13 2015//
 /libm.c/1.12/Thu Dec  3 15:38:13 2015//
 /README.KLIBM/1.12/Sun Dec  6 16:10:25 2015//
-/GNUmakefile.in/1.35/Tue Dec 22 17:08:45 2015//
+/GNUmakefile.am/1.7/Thu May 12 22:31:05 2016//
+/GNUmakefile.in/1.47/Thu May 12 22:31:05 2016//
 D

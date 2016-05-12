@@ -290,52 +290,158 @@ config RTAI_LONG_TIMED_LIST
 #	provide a compromised on time scheduling for both, albeit at a 
 #	negligible added cost.
 
-config RTAI_SCHED_LATENCY_SELFCALIBRATE
-	bool "Latency self calibration"
-	default y
+#config RTAI_SCHED_LATENCY_SELFCALIBRATE
+#	bool "Latency self calibration"
+#	default y
+#	help
+#	Enable the self calibration of the scheduling latency when the RTAI
+#	scheduler is compiled with RTAI_SCHED_LATENCY set to 0.
+#
+#	NOTE: you must run make as the superuser, as this option loads
+#	modules and tries to execute tasks.
+#
+#	See also: RTAI_SCHED_LATENCY, RTAI_KERN_BUSY_ALIGN_RET_DELAY, 
+#	          RTAI_USER_BUSY_ALIGN_RET_DELAY.
+
+#config RTAI_SCHED_LATENCY
+#	string "Scheduling latency (ns)"
+#	default 0
+#        help
+#        The anticipation time to be used to program the hard timer mode for
+#	the next scheduling shot, in order to compensate for the programming
+#	overhead spent to set the right firing time.
+#	It could be determined with the calibration support provided by RTAI, 
+#	starting from a tentative configuration. 
+#	When it is set to zero and RTAI_SCHED_LATENCY_SELFCALIBRATE is enabled
+#	which are the default values available at the very first making, it 
+#	will trigger a self calibrating procedure when the RTAI scheduler is 
+#	made. 
+#	The same value is used for both kernel and user space tasks. Which
+#	means that, for an appropriate on time user space task, there could be 
+#	some anticipation for a kernel space task, i.e. a negative latency. 
+#	In such a case, the busy alignment options could be used to provide a 
+#	compromised on time scheduling for both spaces, albeit at a negligible 
+#	added cost for kernel tasks.
+#	When RTAI_SCHED_LATENCY_SELFCALIBRATE is enabled and RTAI_SCHED_LATENCY 
+#	is 0, the self calibration will:
+#	- evaluate the scheduler latency;
+#	- set an appropriate busy wait anticipation for kernel space; see 
+#	  the related config parameter;
+#	- set a negative appropriate busy wait anticipation for user space; 
+#	  the adoption of a negative value will impede any alignment, while
+#	  its absolute value will be an appropriate indication of what 
+#	  should be used if also a user space alignment is desired; see the 
+#	  related config parameter. It should nonetheless be remarked that,
+#	  because of the calibration being carried out in user space, there 
+#	  should be no alignement need there. 
+#	A user can then further tune such values at will, e.g. using the 
+#	calibration-helper. 
+
+config RTAI_LATENCY_SELF_CALIBRATION_METRICS
+	string "Lat. cal. metrics: 1- AVRG (default), 2- LEAST, 3- (AVRG+LEAST)/2"
+	default 1
 	help
-	Enable the self calibration of the scheduling latency when the RTAI
-	scheduler is compiled with RTAI_SCHED_LATENCY set to 0.
+	This parameter sets the latency calibration criteria.
+	1 - AVERAGE will provide mostly zero averages, but possible oscillations
+	    below zero could be significant.
+	2 - LEAST VALUE should be chosen for average values being only marginally
+	    less than zero.
+	3 - (AVERAGE + LEAST_VALUE)/2, a trivial compromise in between the previous
+	    two.
 
-	NOTE: you must run make as the superuser, as this option loads
-	modules and tries to execute tasks.
-
-	See also: RTAI_SCHED_LATENCY, RTAI_KERN_BUSY_ALIGN_RET_DELAY, 
-	          RTAI_USER_BUSY_ALIGN_RET_DELAY.
-
-config RTAI_SCHED_LATENCY
-	string "Scheduling latency (ns)"
-	default 0
+config RTAI_LATENCY_SELF_CALIBRATION_FREQ
+	string "Latency self calibration frequency (Hz)"
+	default 10000
         help
-        The anticipation time to be used to program the hard timer mode for
-	the next scheduling shot, in order to compensate for the programming
-	overhead spent to set the right firing time.
-	It could be determined with the calibration support provided by RTAI, 
-	starting from a tentative configuration. 
-	When it is set to zero and RTAI_SCHED_LATENCY_SELFCALIBRATE is enabled
-	which are the default values available at the very first making, it 
-	will trigger a self calibrating procedure when the RTAI scheduler is 
-	made. 
-	The same value is used for both kernel and user space tasks. Which
-	means that, for an appropriate on time user space task, there could be 
-	some anticipation for a kernel space task, i.e. a negative latency. 
-	In such a case, the busy alignment options could be used to provide a 
-	compromised on time scheduling for both spaces, albeit at a negligible 
-	added cost for kernel tasks.
-	When RTAI_SCHED_LATENCY_SELFCALIBRATE is enabled and RTAI_SCHED_LATENCY 
-	is 0, the self calibration will:
-	- evaluate the scheduler latency;
-	- set an appropriate busy wait anticipation for kernel space; see 
-	  the related config parameter;
-	- set a negative appropriate busy wait anticipation for user space; 
-	  the adoption of a negative value will impede any alignment, while
-	  its absolute value will be an appropriate indication of what 
-	  should be used if also a user space alignment is desired; see the 
-	  related config parameter. It should nonetheless be remarked that,
-	  because of the calibration being carried out in user space, there 
-	  should be no alignement need there. 
-	A user can then further tune such values at will, e.g. using the 
-	calibration-helper. 
+	In order to be on time, as finely as possible, RTAI anticipates the 
+	next scheduling shot of the hard timer clock interrupt by an amount 
+	of time aimed at compensating the programming overhead spent in 
+	the context switch and to set the right firing time.
+	Such an amount is determined with the calibration support provided 
+	by RTAI itself, both for kernel and user space tasks.
+	The calibration procedure is applied on the fly the first time 
+	rtai_sched.ko is insmoded, by launching, in series, a calibrating 
+	kernel and user space task. That will, typically, happen when any
+	latency test, of the the testsuite which comes with RTAI, is used
+	to verify its installation.
+	The present parameter sets the calibration frequency, while another 
+	one defines the number of loops to be spent for calibrating.
+	The calibration results are saved in
+	"rtai-installdir/calibration/latencies", where "rtai-installdir" is
+	the RTAI installation directory defined when configuring RTAI.
+	Such a file is used in any following insmod of the RTAI scheduler, so
+	that no further recalibration will be carried out.
+	Nevertheless, new recalibrations can be forced anyhow, either through  
+	"rm rtai-installdir/calibration/latencies" or through 
+	"insmod rtai-installdir/modules/rtai_sched.ko recalibrate=1".
+	At the very first rtai_sched.ko insmoding, after delating the 
+	latencies file or after insmoding rtai_sched.ko with "recalibrate=1",
+	you should be prepared to wait for approximately twice the calibration
+	time required to carry out the number of requested calibrated loops.
+	Such a procedure should allow appropriate latency calibrations also
+	when cross development and embedding is needed.
+	Use a frequency that is close to your range of interest. Because of 
+	cache warming, lower frequencies will tend to anticipate the scheduling
+	when higher ones are used and viceversa.
+	If valuable calibrated values are available, they can be used to
+	substitute those obtained by calibrating, through rtai_sched.ko
+	parameters "kernel_latency" and "user_latency", in nanos, either any 
+	single one or both, e.g: "insmod rtai_sched.ko user_latency=4000".
+	A further way to modify the scheduling latencies is to edit the first
+	two fields of "rtai-installdir/calibration/latencies", kernel and
+	user space respectively, likely the simplest and speediest mode.
+
+config RTAI_LATENCY_SELF_CALIBRATION_CYCLES
+	string "Number of latency self calibration cycles"
+	default RTAI_LATENCY_SELF_CALIBRATION_FREQ
+	help
+	In order to be on time, as finely as possible, RTAI anticipates the 
+	next scheduling shot of the hard timer clock interrupt by an amount 
+	of time aimed at compensating the programming overhead spent in 
+	the context switch and to set the right firing time.
+	Such an amount is determined with the calibration support provided 
+	by RTAI itself, both for kernel and user space tasks.
+	The calibration procedure is applied on the fly the first time 
+	rtai_sched.ko is insmoded, by launching, in series, a calibrating 
+	kernel and user space task. That will, typically, happen when any
+	latency test, of the the testsuite which comes with RTAI, is used
+	to verify its installation.
+	The present parameter sets the number of calibration cycles needed 
+	for obtaining a stabilized results, while another one defines the
+	calibration frequency.
+	Use a number of cycles appropriate to allow an adequate number of 
+	reschedules. If the calibration is carried out in a "calm" environment,
+	strongly suggested, there is no need to exceed a few seconds. In any 
+	case, it is done just once, or when you will force it again.
+	Nonetheless, it should be remarked that the calibration precedure, 
+	based on a Kalman filter, checks its convergence, exiting at once 
+	when the calibration tolerances are met. Therefore it is quite
+	possible that the related procedure will be faster than expected,
+	i.e. it will use less that the requested cycles.
+	The calibration results are saved in
+	"rtai-installdir/calibration/latencies", where "rtai-installdir" is
+	the RTAI installation directory defined when configuring RTAI.
+	Such a file is used in any following insmod of the RTAI scheduler, so
+	that no further recalibration will be carried out.
+	Nevertheless, new recalibrations can be forced anyhow, either through  
+	"rm rtai-installdir/calibration/latencies" or through 
+	"insmod rtai-installdir/modules/rtai_sched.ko recalibrate=1".
+	At the very first rtai_sched.ko insmoding, after delating the 
+	latencies file or after insmoding rtai_sched.ko with "recalibrate=1",
+	you should be prepared to wait for approximately twice the calibration
+	time required to carry out the number of requested calibrated loops.
+	Such a procedure should allow appropriate latency calibrations also
+	when cross development and embedding is needed.
+	Use a frequency that is close to your range of interest. Because of 
+	cache warming, lower frequencies will tend to anticipate the scheduling
+	when higher ones are used and viceversa.
+	If valuable calibrated values are available, they can be used to
+	substitute those obtained by calibrating, through the rtai_sched.ko
+	parameters "kernel_latency" and "user_latency", in nanos, either any 
+	single one or both, e.g: "insmod rtai_sched.ko user_latency=4000".
+	A further way to modify the scheduling latencies is to edit the first
+	two fields of "rtai-installdir/calibration/latencies", kernel and
+	user space respectively, likely the simplest and speediest mode.
 
 config RTAI_KERN_BUSY_ALIGN_RET_DELAY
 	string "Delay to return to a switched in timed kernel task (ns)"
@@ -938,7 +1044,7 @@ config RTAI_COMEDI_DIR
 	here. Notice that RTAI support for COMEDI is based on 
 	the comedi.git repository found at "www.comedi.org". 
 	RTAI requires also comedilib.h found in the comedilib.git 
-	repository at the sime site.
+	repository at the same site.
 
 config RTAI_USE_COMEDI_LOCK
 	depends on RTAI_COMEDI_LXRT

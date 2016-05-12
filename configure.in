@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.59)
 
-AC_INIT(rtai,5.0-test1,rtai@rtai.org)
+AC_INIT(rtai,5.0-test2,rtai@rtai.org)
 
 CONFIG_RTAI_VERSION_MAJOR=5
 CONFIG_RTAI_VERSION_MINOR=0
@@ -120,6 +120,8 @@ case "$host" in
    echo ""
    exit 1;;
 esac
+
+RTAI_INSTALL_DIR=
 
 dnl
 dnl Load the RTAI configuration.
@@ -311,16 +313,19 @@ else
 fi
 
 case "$RTAI_LINUX_VERSION" in
-  2.4.*)
-	dnl by design, only RTAI Adeos-oldgen HAL is available with 2.4
-	unset CONFIG_KBUILD
-    ;;
-  2.6.*)
-	dnl by design, RTAI Adeos-oldgen HAL is supported up to 2.6.12 included,
-	dnl and RTAI Adeos-newgen HAL is supported since 2.6.13 included
+dnl  2.4.*)
+dnl	dnl by design, only RTAI Adeos-oldgen HAL is available with 2.4
+dnl	unset CONFIG_KBUILD
+dnl    ;;
+dnl  2.6.*)
+dnl	dnl by design, RTAI Adeos-oldgen HAL is supported up to 2.6.12 included,
+dnl	dnl and RTAI Adeos-newgen HAL is supported since 2.6.13 included
+dnl	CONFIG_KBUILD=y
+dnl    ;;
+  3.*)
 	CONFIG_KBUILD=y
     ;;
-  3.*)
+  4.*)
 	CONFIG_KBUILD=y
     ;;
   *) 
@@ -650,19 +655,19 @@ AC_ARG_ENABLE(watchdog,
 	esac])
 AC_MSG_RESULT(${CONFIG_RTAI_WD:-no})
 
-AC_MSG_CHECKING(for leds-based debugging support)
-AC_ARG_ENABLE(leds,
-	[ --enable-leds		Enable leds-based debugging support],
-	[case "$enableval" in
-	y | yes | b | builtin | built-in) CONFIG_RTAI_LEDS=y ;;
-	m | mod | module) CONFIG_RTAI_LEDS=m ;;
-	*) unset CONFIG_RTAI_LEDS ;;
-	esac])
-AC_MSG_RESULT(${CONFIG_RTAI_LEDS:-no})
-
-if test x$CONFIG_RTAI_LEDS = xy ; then
-  RTAI_BUILTIN_MODLIST="$RTAI_BUILTIN_MODLIST leds"
-fi
+dnl AC_MSG_CHECKING(for leds-based debugging support)
+dnl AC_ARG_ENABLE(leds,
+dnl 	[ --enable-leds		Enable leds-based debugging support],
+dnl 	[case "$enableval" in
+dnl 	y | yes | b | builtin | built-in) CONFIG_RTAI_LEDS=y ;;
+dnl 	m | mod | module) CONFIG_RTAI_LEDS=m ;;
+dnl 	*) unset CONFIG_RTAI_LEDS ;;
+dnl 	esac])
+dnl AC_MSG_RESULT(${CONFIG_RTAI_LEDS:-no})
+dnl 
+dnl if test x$CONFIG_RTAI_LEDS = xy ; then
+dnl   RTAI_BUILTIN_MODLIST="$RTAI_BUILTIN_MODLIST leds"
+dnl fi
 
 AC_MSG_CHECKING(whether LXRT wraps service calls through Linux syscalls)
 AC_ARG_ENABLE(lxrt-use-linux-syscall,
@@ -714,20 +719,50 @@ AC_ARG_ENABLE(long-timed-lists,
 	esac])
 AC_MSG_RESULT(${CONFIG_RTAI_LONG_TIMED_LIST:-no})
 
-AC_MSG_CHECKING(for tuning latency)
-AC_ARG_ENABLE(sched-latency,
-	[ --enable-sched-latency	Set tuning latency],
+AC_MSG_CHECKING(for latency self calibration metrics)
+AC_ARG_ENABLE(latency-self-calibration-metrics,
+	[ --enable-latency-self-calibration-metrics	Set latency self calibration metrics],
 	[case "$enableval" in
  changequote(,)dnl
-	[0-9]*) CONFIG_RTAI_SCHED_LATENCY=$enableval ;;
+	[1-3]*) CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS=$enableval ;;
  changequote([,])dnl
-	*) AC_MSG_ERROR([Bad argument to option: --enable-sched-latency=<nanoseconds>]) ;;
+	*) AC_MSG_ERROR([Bad argument to option: --enable-latency-self-calibration-metrics=[1-3]]) ;;
 	esac])
-if test x$CONFIG_RTAI_SCHED_LATENCY = x ; then
+if test x$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS = x ; then
   # Use a reasonable default if unset
-  CONFIG_RTAI_SCHED_LATENCY=0
+  CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS=1
 fi
-AC_MSG_RESULT($CONFIG_RTAI_SCHED_LATENCY)
+AC_MSG_RESULT($CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS)
+
+AC_MSG_CHECKING(for latency self calibration freq)
+AC_ARG_ENABLE(latency-self-calibration-freq,
+	[ --enable-latency-self-calibration-freq	Set latency self calibration freq],
+	[case "$enableval" in
+ changequote(,)dnl
+	[0-9]*) CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ=$enableval ;;
+ changequote([,])dnl
+	*) AC_MSG_ERROR([Bad argument to option: --enable-latency-self-calibration-freq=<Hz>]) ;;
+	esac])
+if test x$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ = x ; then
+  # Use a reasonable default if unset
+  CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ=10000
+fi
+AC_MSG_RESULT($CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ)
+
+AC_MSG_CHECKING(for latency self calibration cycles)
+AC_ARG_ENABLE(latency-self-calibration-cycles,
+	[ --enable-latency-self-calibration-cycles	Set latency self calibration cycles],
+	[case "$enableval" in
+ changequote(,)dnl
+	[0-9]*) CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES=$enableval ;;
+ changequote([,])dnl
+	*) AC_MSG_ERROR([Bad argument to option: --enable-latency-self-calibration-cycles=<numcycles>]) ;;
+	esac])
+if test x$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES = x ; then
+  # Use a reasonable default if unset
+  CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES=$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ
+fi
+AC_MSG_RESULT($CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES)
 
 AC_MSG_CHECKING(for user busy align ret delay)
 AC_ARG_ENABLE(user-busy-align-ret-delay,
@@ -1138,6 +1173,67 @@ if test x$CONFIG_X86_TSC = xy ; then
 fi
 
 dnl
+dnl Check whether compile calibration/smispv
+dnl
+CONFIG_BUILD_SMISPV=n
+SENSORS_LIBS=
+if test $RTAI_TARGET_ARCH = x86 ; then
+	dnl check for libsensors
+	AC_MSG_CHECKING(for libsensors)
+	save_LIBS="$LIBS"
+	LIBS="$LIBS -lsensors"
+	link_sensors=n
+	AC_TRY_LINK([
+#include <sensors/sensors.h>
+		],[
+	(void)sensors_init(0);
+		],[link_sensors=y])
+	LIBS="$save_LIBS"
+
+	if test $link_sensors = y ; then
+		AC_MSG_RESULT(yes)
+		AC_DEFINE(CONFIG_RTAI_HAVE_SENSORS,1,[have libsensors])
+		SENSORS_LIBS="-lsensors"
+	else
+		AC_MSG_RESULT(no)
+	fi
+
+	dnl check for libpci
+	AC_MSG_CHECKING(for libpci)
+	save_LIBS="$LIBS"
+	LIBS="$LIBS -lpci"
+	link_pci=n
+	AC_TRY_LINK([
+#include <pci/pci.h>
+		],[
+	(void)pci_init(0);
+		],[link_pci=y])
+	LIBS="$save_LIBS"
+
+	if test $link_pci = y ; then
+		AC_MSG_RESULT(yes)
+		AC_DEFINE(HAVE_PCI,1,[have libpci])
+
+		CONFIG_BUILD_SMISPV=y
+	else
+		AC_MSG_RESULT(no)
+	fi
+
+	if test $CONFIG_BUILD_SMISPV = y ; then
+		if test $link_sensors = n ; then
+			AC_MSG_RESULT(    ... smispv will be built WITHOUT temperature monitoring)
+		else
+			AC_MSG_RESULT(    ... smispv will be built)
+		fi
+	else
+		AC_MSG_RESULT(    ... smispv will NOT be built)
+	fi
+fi
+
+AC_SUBST(SENSORS_LIBS)
+AM_CONDITIONAL(CONFIG_BUILD_SMISPV,[test "$CONFIG_BUILD_SMISPV" = y])
+
+dnl
 dnl Check for additional build options.
 dnl
 
@@ -1447,7 +1543,7 @@ test \! x$CONFIG_RTAI_MALLOC_VMALLOC = x && AC_DEFINE(CONFIG_RTAI_MALLOC_VMALLOC
 test \! x$CONFIG_RTAI_TASKLETS = x && AC_DEFINE(CONFIG_RTAI_TASKLETS,1,[Kconfig])
 test \! x$CONFIG_RTAI_USI = x && AC_DEFINE(CONFIG_RTAI_USI,1,[Kconfig])
 test \! x$CONFIG_RTAI_WD = x && AC_DEFINE(CONFIG_RTAI_WD,1,[Kconfig])
-test \! x$CONFIG_RTAI_LEDS = x && AC_DEFINE(CONFIG_RTAI_LEDS,1,[Kconfig])
+dnl test \! x$CONFIG_RTAI_LEDS = x && AC_DEFINE(CONFIG_RTAI_LEDS,1,[Kconfig])
 test \! x$CONFIG_RTAI_LXRT_USE_LINUX_SYSCALL = x && AC_DEFINE(CONFIG_RTAI_LXRT_USE_LINUX_SYSCALL,1,[Kconfig])
 test \! x$CONFIG_RTAI_DRIVERS_SERIAL = x && AC_DEFINE(CONFIG_RTAI_DRIVERS_SERIAL,1,[Kconfig])
 test \! x$CONFIG_RTAI_DRIVERS_16550A = x && AC_DEFINE(CONFIG_RTAI_DRIVERS_16550A,1,[Kconfig])
@@ -1477,13 +1573,15 @@ test x$CONFIG_RTAI_SHM = xy && AC_DEFINE(CONFIG_RTAI_SHM_BUILTIN,1,[Kconfig])
 test x$CONFIG_RTAI_MALLOC = xy && AC_DEFINE(CONFIG_RTAI_MALLOC_BUILTIN,1,[Kconfig])
 test x$CONFIG_RTAI_TASKLETS = xy && AC_DEFINE(CONFIG_RTAI_TASKLETS_BUILTIN,1,[Kconfig])
 test x$CONFIG_RTAI_USI = xy && AC_DEFINE(CONFIG_RTAI_USI_BUILTIN,1,[Kconfig])
-test x$CONFIG_RTAI_LEDS = xy && AC_DEFINE(CONFIG_RTAI_LEDS_BUILTIN,1,[Kconfig])
+dnl test x$CONFIG_RTAI_LEDS = xy && AC_DEFINE(CONFIG_RTAI_LEDS_BUILTIN,1,[Kconfig])
 
 test x$CONFIG_RTAI_SCHED_ISR_LOCK = xy && AC_DEFINE(CONFIG_RTAI_SCHED_ISR_LOCK,1,[Kconfig])
 AC_DEFINE_UNQUOTED(CONFIG_RTAI_RTC_FREQ,$CONFIG_RTAI_RTC_FREQ,[Kconfig])
 test x$CONFIG_RTAI_LONG_TIMED_LIST = xy && AC_DEFINE(CONFIG_RTAI_LONG_TIMED_LIST,1,[Kconfig])
 AC_DEFINE_UNQUOTED(CONFIG_RTAI_SCHED_8254_LATENCY,$CONFIG_RTAI_SCHED_8254_LATENCY,[Kconfig])
-AC_DEFINE_UNQUOTED(CONFIG_RTAI_SCHED_LATENCY,$CONFIG_RTAI_SCHED_LATENCY,[Kconfig])
+AC_DEFINE_UNQUOTED(CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS,$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_METRICS,[Kconfig])
+AC_DEFINE_UNQUOTED(CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ,$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_FREQ,[Kconfig])
+AC_DEFINE_UNQUOTED(CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES,$CONFIG_RTAI_LATENCY_SELF_CALIBRATION_CYCLES,[Kconfig])
 AC_DEFINE_UNQUOTED(CONFIG_RTAI_SCHED_LXRT_NUMSLOTS,$CONFIG_RTAI_SCHED_LXRT_NUMSLOTS,[Kconfig])
 AC_DEFINE_UNQUOTED(CONFIG_RTAI_RTDM_FD_MAX,$CONFIG_RTAI_RTDM_FD_MAX,[Kconfig])
 test x$CONFIG_RTAI_RTDM_SHIRQ = xy && AC_DEFINE(CONFIG_RTAI_RTDM_SHIRQ,1,[Kconfig])
@@ -1557,7 +1655,7 @@ else
     AC_DEFINE(CONFIG_RTAI_INTERNAL_LXRT_SUPPORT,0,[Kconfig])
 fi
 
-test x$arch_supports_leds = xy && AC_DEFINE(CONFIG_RTAI_INTERNAL_LEDS_SUPPORT,1,[Kconfig])
+dnl test x$arch_supports_leds = xy && AC_DEFINE(CONFIG_RTAI_INTERNAL_LEDS_SUPPORT,1,[Kconfig])
 AC_DEFINE_UNQUOTED(CONFIG_RTAI_INTERNAL_LXRT_INLINE,$CONFIG_RTAI_LXRT_INLINE,[Kconfig])
 
 AH_VERBATIM(CONFIG_RTAI_LXRT_INLINE,[
@@ -1605,6 +1703,8 @@ AH_BOTTOM([#endif /* __IN_RTAI__ */])
 dnl No longer used after 2.6.17
 dnl AH_BOTTOM([#include <linux/config.h>])
 
+RTAI_INSTALL_DIR='${exec_prefix}'
+
 dnl
 dnl Produce automake conditionals.
 dnl
@@ -1648,7 +1748,7 @@ AM_CONDITIONAL(CONFIG_RTAI_MALLOC,[test -n "$CONFIG_RTAI_MALLOC"])
 AM_CONDITIONAL(CONFIG_RTAI_TASKLETS,[test -n "$CONFIG_RTAI_TASKLETS"])
 AM_CONDITIONAL(CONFIG_RTAI_USI,[test -n "$CONFIG_RTAI_USI"])
 AM_CONDITIONAL(CONFIG_RTAI_WD,[test -n "$CONFIG_RTAI_WD"])
-AM_CONDITIONAL(CONFIG_RTAI_LEDS,[test -n "$CONFIG_RTAI_LEDS"])
+dnl AM_CONDITIONAL(CONFIG_RTAI_LEDS,[test -n "$CONFIG_RTAI_LEDS"])
 AM_CONDITIONAL(CONFIG_RTAI_LXRT_USE_LINUX_SYSCALL,[test -n "$CONFIG_RTAI_LXRT_USE_LINUX_SYSCALL"])
 
 AM_CONDITIONAL(CONFIG_RTAI_MATH_BUILTIN,[test x$CONFIG_RTAI_MATH = xy])
@@ -1664,7 +1764,7 @@ AM_CONDITIONAL(CONFIG_RTAI_SHM_BUILTIN,[test x$CONFIG_RTAI_SHM = xy])
 AM_CONDITIONAL(CONFIG_RTAI_MALLOC_BUILTIN,[test x$CONFIG_RTAI_MALLOC = xy])
 AM_CONDITIONAL(CONFIG_RTAI_TASKLETS_BUILTIN,[test x$CONFIG_RTAI_TASKLETS = xy])
 AM_CONDITIONAL(CONFIG_RTAI_USI_BUILTIN,[test x$CONFIG_RTAI_USI = xy])
-AM_CONDITIONAL(CONFIG_RTAI_LEDS_BUILTIN,[test x$CONFIG_RTAI_LEDS = xy])
+dnl AM_CONDITIONAL(CONFIG_RTAI_LEDS_BUILTIN,[test x$CONFIG_RTAI_LEDS = xy])
 
 dnl Non-core packages.
 AM_CONDITIONAL(CONFIG_RTAI_COMEDI_LXRT,[test x$CONFIG_RTAI_COMEDI_LXRT = xy])
@@ -1695,9 +1795,6 @@ AM_CONDITIONAL(CONFIG_RTAI_MAINTAINER,[test "$CONFIG_RTAI_MAINTAINER" = y])
 AM_CONDITIONAL(CONFIG_RTAI_MAINTAINER_PMA,[test "$CONFIG_RTAI_MAINTAINER_PMA" = y])
 AM_CONDITIONAL(CONFIG_RTAI_MAINTAINER_PGM,[test "$CONFIG_RTAI_MAINTAINER_PGM" = y])
 AM_CONDITIONAL(CONFIG_RTAI_OLD_FASHIONED_BUILD,[test "$CONFIG_RTAI_OLD_FASHIONED_BUILD" = y])
-
-dnl self-calibrate latency
-AM_CONDITIONAL(CONFIG_RTAI_SCHED_LATENCY_SELFCALIBRATE,[test "$CONFIG_RTAI_SCHED_LATENCY_SELFCALIBRATE" = y])
 
 dnl
 dnl Define arch-specific CFLAGS and links
@@ -1942,7 +2039,7 @@ if test x$CONFIG_KBUILD = xy; then
    AC_CONFIG_LINKS(base/ipc/tbx/Makefile:base/ipc/tbx/Makefile.kbuild)
    AC_CONFIG_LINKS(base/ipc/netrpc/Makefile:base/ipc/netrpc/Makefile.kbuild)
    AC_CONFIG_LINKS(base/ipc/shm/Makefile:base/ipc/shm/Makefile.kbuild)
-   AC_CONFIG_LINKS(base/leds/Makefile:base/leds/Makefile.kbuild)
+dnl   AC_CONFIG_LINKS(base/leds/Makefile:base/leds/Makefile.kbuild)
    AC_CONFIG_LINKS(base/posix/Makefile:base/posix/Makefile.kbuild)
    AC_CONFIG_LINKS(base/malloc/Makefile:base/malloc/Makefile.kbuild)
    AC_CONFIG_LINKS(base/tasklets/Makefile:base/tasklets/Makefile.kbuild)
@@ -2014,6 +2111,7 @@ AC_SUBST(RTAI_POSIX_WRAP)
 AC_SUBST(CONFIG_RTAI_LINUXDIR)
 AC_SUBST(CROSSCOMPILE_TEST)
 
+AC_SUBST(RTAI_INSTALL_DIR)
 
 AC_CONFIG_FILES([ \
 	GNUmakefile \
@@ -2049,10 +2147,10 @@ AC_CONFIG_FILES([ \
 	base/trace/GNUmakefile \
 	base/wd/GNUmakefile \
 	base/usi/GNUmakefile \
-	base/leds/GNUmakefile \
 	base/posix/GNUmakefile \
 	])
 
+dnl base/leds/GNUmakefile \
 dnl base/arch/ppc/GNUmakefile \
 dnl base/arch/ppc/hal/GNUmakefile \
 dnl base/include/asm-ppc/GNUmakefile \

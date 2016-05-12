@@ -36,7 +36,7 @@ union rtai_lxrt_t { RTIME rt; long i[2]; void *v[2]; };
 
 #define TIMER_NAME     RTAI_TIMER_NAME
 #define TIMER_FREQ     RTAI_TIMER_FREQ
-#define SCHED_LATENCY  RTAI_SCHED_LATENCY
+//#define SCHED_LATENCY  RTAI_SCHED_LATENCY
 
 #define USE_LINUX_TIMER
 #define update_linux_timer(cpuid) \
@@ -88,7 +88,7 @@ union rtai_lxrt_t { RTIME rt; long i[2]; void *v[2]; };
 
 static inline void _lxrt_context_switch (struct task_struct *prev, struct task_struct *next, int cpuid)
 {
-	extern void *context_switch(void *, void *, void *); //i from LINUX
+	extern void *context_switch(void *, void *, void *); // from LINUX
 /*
  *	if (__thread_has_fpu(prev)) clts(); is not needed, it is done already
  */
