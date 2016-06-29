@@ -1763,7 +1763,7 @@ unsigned long is_process_registered(struct task_struct *tsk)
 {
         void *adr;
 
-        if ((adr = tsk->rtai_tskext(TSKEXT0))) {
+        if ((adr = rtai_tskext(tsk, TSKEXT0))) {
 		int slot;
 		for (slot = 1; slot <= max_slots; slot++) {
 			if (lxrt_list[slot].adr == adr) {
