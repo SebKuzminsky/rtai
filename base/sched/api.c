@@ -1296,7 +1296,6 @@ COLLISION_COUNT();
 			list[k].alink = 0;
 			rt_spin_unlock_irqrestore(flags, &list_lock);
 	                if (hash_ins_adr(adr, list, lstlen, k) <= 0) {
-				rt_spin_unlock_irqrestore(flags, &list_lock);
         	                return 0;
                 	}
 			return k;
