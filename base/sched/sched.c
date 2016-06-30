@@ -2830,7 +2830,6 @@ static void __rtai_lxrt_exit(void)
 #endif
 	rt_registry_free();
 	set_current_state(TASK_INTERRUPTIBLE);
-	schedule_timeout(HZ/10);
 
 #ifdef DECLR_8254_TSC_EMULATION
 	CLEAR_8254_TSC_EMULATION;
