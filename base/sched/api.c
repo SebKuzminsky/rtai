@@ -1260,6 +1260,7 @@ COLLISION_COUNT();
 			rt_spin_unlock_irqrestore(flags, &list_lock);
 			return k;
 		}
+                rt_spin_unlock_irqrestore(flags, &list_lock);
 	}
 }
 
@@ -1300,6 +1301,7 @@ COLLISION_COUNT();
                 	}
 			return k;
 		}
+                rt_spin_unlock_irqrestore(flags, &list_lock);
 	}
 }
 
@@ -1334,6 +1336,7 @@ COLLISION_COUNT();
 			rt_spin_unlock_irqrestore(flags, &list_lock);
 			return NULL;
 		}
+                rt_spin_unlock_irqrestore(flags, &list_lock);
 	}
 }
 
@@ -1365,6 +1368,7 @@ COLLISION_COUNT();
 			rt_spin_unlock_irqrestore(flags, &list_lock);
 			return 0;
 		}
+                rt_spin_unlock_irqrestore(flags, &list_lock);
 	}
 }
 
