@@ -1229,7 +1229,6 @@ static inline int hash_ins_adr(void *adr, struct rt_registry_entry *list, int ls
 	unsigned long flags;
 
 	i = hash_fun((unsigned long)adr, lstlen);
-        flags = rt_spin_lock_irqsave(&list_lock);
 	while (1) {
 		k = i;
 		while (list[k].adr > NOADR && list[k].adr != adr) {
@@ -1238,10 +1237,10 @@ COLLISION_COUNT();
 				k = 1;
 			}
 			if (k == i) {
-                                rt_spin_unlock_irqrestore(flags, &list_lock);
 				return 0;
 			}
 		}
+		flags = rt_spin_lock_irqsave(&list_lock);
 		if (list[k].adr == adr) {
 			rt_spin_unlock_irqrestore(flags, &list_lock);
 			return -k;
@@ -1252,6 +1251,7 @@ COLLISION_COUNT();
 			rt_spin_unlock_irqrestore(flags, &list_lock);
 			return k;
 		}
+                rt_spin_unlock_irqrestore(flags, &list_lock);
 	}
 }
 
@@ -1261,7 +1261,6 @@ static int hash_ins_name(unsigned long name, void *adr, int type, struct task_st
 	unsigned long flags;
 
 	i = hash_fun(name, lstlen);
-        flags = rt_spin_lock_irqsave(&list_lock);
 	while (1) {
 		k = i;
 		while (list[k].name > NONAME && list[k].name != name) {
@@ -1270,10 +1269,10 @@ COLLISION_COUNT();
 				k = 1;
 			}
 			if (k == i) {
-                                rt_spin_unlock_irqrestore(flags, &list_lock);
 				return 0;
 			}
 		}
+		flags = rt_spin_lock_irqsave(&list_lock);
 		if (list[k].name == name) {
 			if (inc) {
 				list[k].count++;
@@ -1292,6 +1291,7 @@ COLLISION_COUNT();
                 	}
 			return k;
 		}
+                rt_spin_unlock_irqrestore(flags, &list_lock);
 	}
 }
 
@@ -1301,7 +1301,6 @@ static void *hash_find_name(unsigned long name, struct rt_registry_entry *list, 
 	unsigned long flags;
 
 	i = hash_fun(name, lstlen);
-        flags = rt_spin_lock_irqsave(&list_lock);
 	while (1) {
 		k = i;
 		while (list[k].name && list[k].name != name) {
@@ -1310,23 +1309,24 @@ COLLISION_COUNT();
 				k = 1;
 			}
 			if (k == i) {
-                                rt_spin_unlock_irqrestore(flags, &list_lock);
 				return NULL;
 			}
 		}
+		flags = rt_spin_lock_irqsave(&list_lock);
 		if (list[k].name == name) {
 			if (inc) {
 				list[k].count++;
 			}
+			rt_spin_unlock_irqrestore(flags, &list_lock);
 			if (slot) {
 				*slot = k;
 			}
-			rt_spin_unlock_irqrestore(flags, &list_lock);
 			return list[list[k].alink].adr;
 		} else if (list[k].name <= NONAME) {
 			rt_spin_unlock_irqrestore(flags, &list_lock);
 			return NULL;
 		}
+                rt_spin_unlock_irqrestore(flags, &list_lock);
 	}
 }
 
@@ -1336,7 +1336,6 @@ static unsigned long hash_find_adr(void *adr, struct rt_registry_entry *list, lo
 	unsigned long flags;
 
 	i = hash_fun((unsigned long)adr, lstlen);
-        flags = rt_spin_lock_irqsave(&list_lock);
 	while (1) {
 		k = i;
 		while (list[k].adr && list[k].adr != adr) {
@@ -1345,10 +1344,10 @@ COLLISION_COUNT();
 				k = 1;
 			}
 			if (k == i) {
-                                rt_spin_unlock_irqrestore(flags, &list_lock);
 				return 0;
 			}
 		}
+		flags = rt_spin_lock_irqsave(&list_lock);
 		if (list[k].adr == adr) {
 			if (inc) {
 				list[list[k].nlink].count++;
@@ -1359,6 +1358,7 @@ COLLISION_COUNT();
 			rt_spin_unlock_irqrestore(flags, &list_lock);
 			return 0;
 		}
+                rt_spin_unlock_irqrestore(flags, &list_lock);
 	}
 }
 
@@ -1368,17 +1368,16 @@ static int hash_rem_name(unsigned long name, struct rt_registry_entry *list, lon
 	unsigned long flags;
 
 	k = i = hash_fun(name, lstlen);
-	flags = rt_spin_lock_irqsave(&list_lock);
 	while (list[k].name && list[k].name != name) {
 COLLISION_COUNT();
 		if (++k > lstlen) {
 			k = 1;
 		}
 		if (k == i) {
-                        rt_spin_unlock_irqrestore(flags, &list_lock);
 			return 0;
 		}
 	}
+	flags = rt_spin_lock_irqsave(&list_lock);
 	if (list[k].name == name) {
 		if (!dec || (list[k].count && !--list[k].count)) {
 			int j;
@@ -1409,17 +1408,16 @@ static int hash_rem_adr(void *adr, struct rt_registry_entry *list, long lstlen, 
 	unsigned long flags;
 
 	k = i = hash_fun((unsigned long)adr, lstlen);
-	flags = rt_spin_lock_irqsave(&list_lock);
 	while (list[k].adr && list[k].adr != adr) {
 COLLISION_COUNT();
 		if (++k > lstlen) {
 			k = 1;
 		}
 		if (k == i) {
-                        rt_spin_unlock_irqrestore(flags, &list_lock);
 			return 0;
 		}
 	}
+	flags = rt_spin_lock_irqsave(&list_lock);
 	if (list[k].adr == adr) {
 		if (!dec || (list[list[k].nlink].count && !--list[list[k].nlink].count)) {
 			int j;
