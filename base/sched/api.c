@@ -1252,7 +1252,6 @@ COLLISION_COUNT();
 			rt_spin_unlock_irqrestore(flags, &list_lock);
 			return k;
 		}
-                rt_printk("%s: trying again\n", __func__);
 	}
 }
 
@@ -1272,7 +1271,6 @@ COLLISION_COUNT();
 			}
 			if (k == i) {
                                 rt_spin_unlock_irqrestore(flags, &list_lock);
-                                rt_printk("%s: no room\n", __func__);
 				return 0;
 			}
 		}
@@ -1281,7 +1279,6 @@ COLLISION_COUNT();
 				list[k].count++;
 			}
 			rt_spin_unlock_irqrestore(flags, &list_lock);
-                        rt_printk("%s: %lu was already there, final count=%d\n", __func__, name, list[k].count);
 			return -k;
 		} else if (list[k].name <= NONAME) {
 			list[k].name  = name;
@@ -1325,13 +1322,11 @@ COLLISION_COUNT();
 				*slot = k;
 			}
 			rt_spin_unlock_irqrestore(flags, &list_lock);
-                        rt_printk("%s: name=%lu alink=%d alink/adr=%p final count=%d\n", __func__, name, list[k].alink, list[list[k].alink].adr, list[k].count);
 			return list[list[k].alink].adr;
 		} else if (list[k].name <= NONAME) {
 			rt_spin_unlock_irqrestore(flags, &list_lock);
 			return NULL;
 		}
-                rt_printk("%s: wrong name, trying again\n", __func__);
 	}
 }
 
@@ -1359,7 +1354,6 @@ COLLISION_COUNT();
 				list[list[k].nlink].count++;
 			}
 			rt_spin_unlock_irqrestore(flags, &list_lock);
-                        rt_printk("%s: adr=%p found in slot %d, final count %d\n", __func__, adr, k, list[k].count);
 			return list[list[k].nlink].name;
 		} else if (list[k].adr <= NOADR) {
 			rt_spin_unlock_irqrestore(flags, &list_lock);
@@ -1382,7 +1376,6 @@ COLLISION_COUNT();
 		}
 		if (k == i) {
                         rt_spin_unlock_irqrestore(flags, &list_lock);
-                        rt_printk("%s: name=%lu not found\n", __func__, name);
 			return 0;
 		}
 	}
@@ -1424,7 +1417,6 @@ COLLISION_COUNT();
 		}
 		if (k == i) {
                         rt_spin_unlock_irqrestore(flags, &list_lock);
-                        rt_printk("%s: adr=%p not found\n", __func__, adr);
 			return 0;
 		}
 	}
@@ -1445,7 +1437,6 @@ COLLISION_COUNT();
 			k = list[list[k].nlink].count;
 		}
 		rt_spin_unlock_irqrestore(flags, &list_lock);
-                rt_printk("%s: adr=%p final count %d\n", __func__, adr, list[k].count);
 		return k;
 	}
 	rt_spin_unlock_irqrestore(flags, &list_lock);
@@ -1539,7 +1530,6 @@ int rt_get_registry_slot(int slot, struct rt_registry_entry *entry)
 		*entry = lxrt_list[slot];
 		entry->adr = lxrt_list[entry->alink].adr;
 		rt_spin_unlock_irqrestore(flags, &list_lock);
-                rt_printk("%s: slot=%d, name=%lu\n", __func__, slot, lxrt_list[slot].name);
 		return slot;
        	}
         rt_spin_unlock_irqrestore(flags, &list_lock);
