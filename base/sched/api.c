@@ -1559,6 +1559,7 @@ void rt_registry_free(void)
 {
 	if (lxrt_list) {
 		vfree(lxrt_list);
+                lxrt_list = NULL;
 	}
 }
 #else
