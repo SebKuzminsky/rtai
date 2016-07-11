@@ -1886,6 +1886,8 @@ void krtai_objects_release(void)
 
 	for (slot = 1; slot <= max_slots; slot++) {
                 if (rt_get_registry_slot(slot, &entry)) {
+                        int is_alien;
+                        is_alien = 0;
 			switch (entry.type) {
 	                       	case IS_TASK:
 					type = "TASK";
@@ -1914,10 +1916,13 @@ void krtai_objects_release(void)
 					break;
 	                       	default:
 					type = "ALIEN";
+                                        is_alien = 1;
 					break;
 			}
-			num2nam(entry.name, name);
-			rt_printk("SCHED releases registered named %s %s\n", type, name);
+                        if (!is_alien) {
+                                num2nam(entry.name, name);
+                                rt_printk("SCHED releases registered named %s %s\n", type, name);
+                        }
 		}
 	}
 }
