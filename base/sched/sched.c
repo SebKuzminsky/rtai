@@ -2806,9 +2806,7 @@ static void __rtai_lxrt_exit(void)
 
 	rtai_tskext(kthread_server_thread, TSKEXT3) = (void *)1;
 	rt_task_resume(rtai_tskext_t(kthread_server_thread, TSKEXT0));
-        rt_printk("waiting for kthread_server_thread\n");
 	while (rtai_tskext(kthread_server_thread, TSKEXT3)) msleep(5);
-        rt_printk("kthread_server_thread is gone!\n");
 
 	lxrt_killall();
 
