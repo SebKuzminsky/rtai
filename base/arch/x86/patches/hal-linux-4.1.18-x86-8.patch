@@ -434,7 +434,7 @@ index 615fa90..e0a62ab 100644
  extern void default_send_IPI_mask_sequence_phys(const struct cpumask *mask,
 diff --git a/arch/x86/include/asm/ipipe.h b/arch/x86/include/asm/ipipe.h
 new file mode 100644
-index 0000000..ed68a7e
+index 0000000..1f36f2b
 --- /dev/null
 +++ b/arch/x86/include/asm/ipipe.h
 @@ -0,0 +1,112 @@
@@ -464,7 +464,7 @@ index 0000000..ed68a7e
 +
 +#ifdef CONFIG_IPIPE
 +
-+#define IPIPE_CORE_RELEASE	7
++#define IPIPE_CORE_RELEASE	8
 +
 +struct ipipe_domain;
 +struct pt_regs;
@@ -3423,10 +3423,10 @@ index e7cc537..bc5e8f8 100644
  handle_real_irq:
 diff --git a/arch/x86/kernel/ipipe.c b/arch/x86/kernel/ipipe.c
 new file mode 100644
-index 0000000..fb9d80f
+index 0000000..5d5b403
 --- /dev/null
 +++ b/arch/x86/kernel/ipipe.c
-@@ -0,0 +1,510 @@
+@@ -0,0 +1,511 @@
 +/*   -*- linux-c -*-
 + *   linux/arch/x86/kernel/ipipe.c
 + *
@@ -3654,7 +3654,8 @@ index 0000000..fb9d80f
 +
 +void ipipe_set_irq_affinity(unsigned int irq, cpumask_t cpumask)
 +{
-+	if (WARN_ON_ONCE(irq_get_chip(irq)->irq_set_affinity == NULL))
++	if (ipipe_virtual_irq_p(irq) ||
++	    irq_get_chip(irq)->irq_set_affinity == NULL)
 +		return;
 +
 +	cpumask_and(&cpumask, &cpumask, cpu_online_mask);
@@ -5805,6 +5806,336 @@ index d27d015..d673882 100644
  } ____cacheline_aligned;
  
  /*
+diff --git a/include/linux/compiler-gcc.h b/include/linux/compiler-gcc.h
+index 371e560..484ef6e 100644
+--- a/include/linux/compiler-gcc.h
++++ b/include/linux/compiler-gcc.h
+@@ -115,10 +115,122 @@
+ #define __maybe_unused			__attribute__((unused))
+ #define __always_unused			__attribute__((unused))
+ 
+-#define __gcc_header(x) #x
+-#define _gcc_header(x) __gcc_header(linux/compiler-gcc##x.h)
+-#define gcc_header(x) _gcc_header(x)
+-#include gcc_header(__GNUC__)
++/* gcc version specific checks */
++
++#if GCC_VERSION < 30200
++# error Sorry, your compiler is too old - please upgrade it.
++#endif
++
++#if GCC_VERSION < 30300
++# define __used			__attribute__((__unused__))
++#else
++# define __used			__attribute__((__used__))
++#endif
++
++#ifdef CONFIG_GCOV_KERNEL
++# if GCC_VERSION < 30400
++#   error "GCOV profiling support for gcc versions below 3.4 not included"
++# endif /* __GNUC_MINOR__ */
++#endif /* CONFIG_GCOV_KERNEL */
++
++#if GCC_VERSION >= 30400
++#define __must_check		__attribute__((warn_unused_result))
++#endif
++
++#if GCC_VERSION >= 40000
++
++/* GCC 4.1.[01] miscompiles __weak */
++#ifdef __KERNEL__
++# if GCC_VERSION >= 40100 &&  GCC_VERSION <= 40101
++#  error Your version of gcc miscompiles the __weak directive
++# endif
++#endif
++
++#define __used			__attribute__((__used__))
++#define __compiler_offsetof(a, b)					\
++	__builtin_offsetof(a, b)
++
++#if GCC_VERSION >= 40100 && GCC_VERSION < 40600
++# define __compiletime_object_size(obj) __builtin_object_size(obj, 0)
++#endif
++
++#if GCC_VERSION >= 40300
++/* Mark functions as cold. gcc will assume any path leading to a call
++ * to them will be unlikely.  This means a lot of manual unlikely()s
++ * are unnecessary now for any paths leading to the usual suspects
++ * like BUG(), printk(), panic() etc. [but let's keep them for now for
++ * older compilers]
++ *
++ * Early snapshots of gcc 4.3 don't support this and we can't detect this
++ * in the preprocessor, but we can live with this because they're unreleased.
++ * Maketime probing would be overkill here.
++ *
++ * gcc also has a __attribute__((__hot__)) to move hot functions into
++ * a special section, but I don't see any sense in this right now in
++ * the kernel context
++ */
++#define __cold			__attribute__((__cold__))
++
++#define __UNIQUE_ID(prefix) __PASTE(__PASTE(__UNIQUE_ID_, prefix), __COUNTER__)
++
++#ifndef __CHECKER__
++# define __compiletime_warning(message) __attribute__((warning(message)))
++# define __compiletime_error(message) __attribute__((error(message)))
++#endif /* __CHECKER__ */
++#endif /* GCC_VERSION >= 40300 */
++
++#if GCC_VERSION >= 40500
++/*
++ * Mark a position in code as unreachable.  This can be used to
++ * suppress control flow warnings after asm blocks that transfer
++ * control elsewhere.
++ *
++ * Early snapshots of gcc 4.5 don't support this and we can't detect
++ * this in the preprocessor, but we can live with this because they're
++ * unreleased.  Really, we need to have autoconf for the kernel.
++ */
++#define unreachable() __builtin_unreachable()
++
++/* Mark a function definition as prohibited from being cloned. */
++#define __noclone	__attribute__((__noclone__))
++
++#endif /* GCC_VERSION >= 40500 */
++
++#if GCC_VERSION >= 40600
++/*
++ * Tell the optimizer that something else uses this function or variable.
++ */
++#define __visible	__attribute__((externally_visible))
++#endif
++
++/*
++ * GCC 'asm goto' miscompiles certain code sequences:
++ *
++ *   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=58670
++ *
++ * Work it around via a compiler barrier quirk suggested by Jakub Jelinek.
++ *
++ * (asm goto is automatically volatile - the naming reflects this.)
++ */
++#define asm_volatile_goto(x...)	do { asm goto(x); asm (""); } while (0)
++
++#ifdef CONFIG_ARCH_USE_BUILTIN_BSWAP
++#if GCC_VERSION >= 40400
++#define __HAVE_BUILTIN_BSWAP32__
++#define __HAVE_BUILTIN_BSWAP64__
++#endif
++#if GCC_VERSION >= 40800 || (defined(__powerpc__) && GCC_VERSION >= 40600)
++#define __HAVE_BUILTIN_BSWAP16__
++#endif
++#endif /* CONFIG_ARCH_USE_BUILTIN_BSWAP */
++
++#if GCC_VERSION >= 50000
++#define KASAN_ABI_VERSION 4
++#elif GCC_VERSION >= 40902
++#define KASAN_ABI_VERSION 3
++#endif
++
++#endif	/* gcc version >= 40000 specific checks */
+ 
+ #if !defined(__noclone)
+ #define __noclone	/* not needed */
+diff --git a/include/linux/compiler-gcc3.h b/include/linux/compiler-gcc3.h
+deleted file mode 100644
+index 7d89feb..0000000
+--- a/include/linux/compiler-gcc3.h
++++ /dev/null
+@@ -1,23 +0,0 @@
+-#ifndef __LINUX_COMPILER_H
+-#error "Please don't include <linux/compiler-gcc3.h> directly, include <linux/compiler.h> instead."
+-#endif
+-
+-#if GCC_VERSION < 30200
+-# error Sorry, your compiler is too old - please upgrade it.
+-#endif
+-
+-#if GCC_VERSION >= 30300
+-# define __used			__attribute__((__used__))
+-#else
+-# define __used			__attribute__((__unused__))
+-#endif
+-
+-#if GCC_VERSION >= 30400
+-#define __must_check		__attribute__((warn_unused_result))
+-#endif
+-
+-#ifdef CONFIG_GCOV_KERNEL
+-# if GCC_VERSION < 30400
+-#   error "GCOV profiling support for gcc versions below 3.4 not included"
+-# endif /* __GNUC_MINOR__ */
+-#endif /* CONFIG_GCOV_KERNEL */
+diff --git a/include/linux/compiler-gcc4.h b/include/linux/compiler-gcc4.h
+deleted file mode 100644
+index 769e198..0000000
+--- a/include/linux/compiler-gcc4.h
++++ /dev/null
+@@ -1,91 +0,0 @@
+-#ifndef __LINUX_COMPILER_H
+-#error "Please don't include <linux/compiler-gcc4.h> directly, include <linux/compiler.h> instead."
+-#endif
+-
+-/* GCC 4.1.[01] miscompiles __weak */
+-#ifdef __KERNEL__
+-# if GCC_VERSION >= 40100 &&  GCC_VERSION <= 40101
+-#  error Your version of gcc miscompiles the __weak directive
+-# endif
+-#endif
+-
+-#define __used			__attribute__((__used__))
+-#define __must_check 		__attribute__((warn_unused_result))
+-#define __compiler_offsetof(a,b) __builtin_offsetof(a,b)
+-
+-#if GCC_VERSION >= 40100 && GCC_VERSION < 40600
+-# define __compiletime_object_size(obj) __builtin_object_size(obj, 0)
+-#endif
+-
+-#if GCC_VERSION >= 40300
+-/* Mark functions as cold. gcc will assume any path leading to a call
+-   to them will be unlikely.  This means a lot of manual unlikely()s
+-   are unnecessary now for any paths leading to the usual suspects
+-   like BUG(), printk(), panic() etc. [but let's keep them for now for
+-   older compilers]
+-
+-   Early snapshots of gcc 4.3 don't support this and we can't detect this
+-   in the preprocessor, but we can live with this because they're unreleased.
+-   Maketime probing would be overkill here.
+-
+-   gcc also has a __attribute__((__hot__)) to move hot functions into
+-   a special section, but I don't see any sense in this right now in
+-   the kernel context */
+-#define __cold			__attribute__((__cold__))
+-
+-#define __UNIQUE_ID(prefix) __PASTE(__PASTE(__UNIQUE_ID_, prefix), __COUNTER__)
+-
+-#ifndef __CHECKER__
+-# define __compiletime_warning(message) __attribute__((warning(message)))
+-# define __compiletime_error(message) __attribute__((error(message)))
+-#endif /* __CHECKER__ */
+-#endif /* GCC_VERSION >= 40300 */
+-
+-#if GCC_VERSION >= 40500
+-/*
+- * Mark a position in code as unreachable.  This can be used to
+- * suppress control flow warnings after asm blocks that transfer
+- * control elsewhere.
+- *
+- * Early snapshots of gcc 4.5 don't support this and we can't detect
+- * this in the preprocessor, but we can live with this because they're
+- * unreleased.  Really, we need to have autoconf for the kernel.
+- */
+-#define unreachable() __builtin_unreachable()
+-
+-/* Mark a function definition as prohibited from being cloned. */
+-#define __noclone	__attribute__((__noclone__))
+-
+-#endif /* GCC_VERSION >= 40500 */
+-
+-#if GCC_VERSION >= 40600
+-/*
+- * Tell the optimizer that something else uses this function or variable.
+- */
+-#define __visible __attribute__((externally_visible))
+-#endif
+-
+-/*
+- * GCC 'asm goto' miscompiles certain code sequences:
+- *
+- *   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=58670
+- *
+- * Work it around via a compiler barrier quirk suggested by Jakub Jelinek.
+- *
+- * (asm goto is automatically volatile - the naming reflects this.)
+- */
+-#define asm_volatile_goto(x...)	do { asm goto(x); asm (""); } while (0)
+-
+-#ifdef CONFIG_ARCH_USE_BUILTIN_BSWAP
+-#if GCC_VERSION >= 40400
+-#define __HAVE_BUILTIN_BSWAP32__
+-#define __HAVE_BUILTIN_BSWAP64__
+-#endif
+-#if GCC_VERSION >= 40800 || (defined(__powerpc__) && GCC_VERSION >= 40600)
+-#define __HAVE_BUILTIN_BSWAP16__
+-#endif
+-#endif /* CONFIG_ARCH_USE_BUILTIN_BSWAP */
+-
+-#if GCC_VERSION >= 40902
+-#define KASAN_ABI_VERSION 3
+-#endif
+diff --git a/include/linux/compiler-gcc5.h b/include/linux/compiler-gcc5.h
+deleted file mode 100644
+index efee493..0000000
+--- a/include/linux/compiler-gcc5.h
++++ /dev/null
+@@ -1,67 +0,0 @@
+-#ifndef __LINUX_COMPILER_H
+-#error "Please don't include <linux/compiler-gcc5.h> directly, include <linux/compiler.h> instead."
+-#endif
+-
+-#define __used				__attribute__((__used__))
+-#define __must_check			__attribute__((warn_unused_result))
+-#define __compiler_offsetof(a, b)	__builtin_offsetof(a, b)
+-
+-/* Mark functions as cold. gcc will assume any path leading to a call
+-   to them will be unlikely.  This means a lot of manual unlikely()s
+-   are unnecessary now for any paths leading to the usual suspects
+-   like BUG(), printk(), panic() etc. [but let's keep them for now for
+-   older compilers]
+-
+-   Early snapshots of gcc 4.3 don't support this and we can't detect this
+-   in the preprocessor, but we can live with this because they're unreleased.
+-   Maketime probing would be overkill here.
+-
+-   gcc also has a __attribute__((__hot__)) to move hot functions into
+-   a special section, but I don't see any sense in this right now in
+-   the kernel context */
+-#define __cold			__attribute__((__cold__))
+-
+-#define __UNIQUE_ID(prefix) __PASTE(__PASTE(__UNIQUE_ID_, prefix), __COUNTER__)
+-
+-#ifndef __CHECKER__
+-# define __compiletime_warning(message) __attribute__((warning(message)))
+-# define __compiletime_error(message) __attribute__((error(message)))
+-#endif /* __CHECKER__ */
+-
+-/*
+- * Mark a position in code as unreachable.  This can be used to
+- * suppress control flow warnings after asm blocks that transfer
+- * control elsewhere.
+- *
+- * Early snapshots of gcc 4.5 don't support this and we can't detect
+- * this in the preprocessor, but we can live with this because they're
+- * unreleased.  Really, we need to have autoconf for the kernel.
+- */
+-#define unreachable() __builtin_unreachable()
+-
+-/* Mark a function definition as prohibited from being cloned. */
+-#define __noclone	__attribute__((__noclone__))
+-
+-/*
+- * Tell the optimizer that something else uses this function or variable.
+- */
+-#define __visible __attribute__((externally_visible))
+-
+-/*
+- * GCC 'asm goto' miscompiles certain code sequences:
+- *
+- *   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=58670
+- *
+- * Work it around via a compiler barrier quirk suggested by Jakub Jelinek.
+- *
+- * (asm goto is automatically volatile - the naming reflects this.)
+- */
+-#define asm_volatile_goto(x...)	do { asm goto(x); asm (""); } while (0)
+-
+-#ifdef CONFIG_ARCH_USE_BUILTIN_BSWAP
+-#define __HAVE_BUILTIN_BSWAP32__
+-#define __HAVE_BUILTIN_BSWAP64__
+-#define __HAVE_BUILTIN_BSWAP16__
+-#endif /* CONFIG_ARCH_USE_BUILTIN_BSWAP */
+-
+-#define KASAN_ABI_VERSION 4
 diff --git a/include/linux/console.h b/include/linux/console.h
 index 901555a..1ba117c 100644
 --- a/include/linux/console.h
@@ -8173,7 +8504,7 @@ index dd1109f..8056567 100644
  }
  
 diff --git a/include/linux/irqnr.h b/include/linux/irqnr.h
-index fdd5cc1..1310416 100644
+index fdd5cc1..be145be 100644
 --- a/include/linux/irqnr.h
 +++ b/include/linux/irqnr.h
 @@ -5,7 +5,11 @@
@@ -8183,7 +8514,7 @@ index fdd5cc1..1310416 100644
 +#if !defined(CONFIG_IPIPE) || defined(CONFIG_SPARSE_IRQ)
  extern struct irq_desc *irq_to_desc(unsigned int irq);
 +#else
-+#define irq_to_desc(irq)	(&irq_desc[irq])
++#define irq_to_desc(irq)	({ ipipe_virtual_irq_p(irq) ? NULL : &irq_desc[irq]; })
 +#endif
  unsigned int irq_get_next_irq(unsigned int offset);
  
@@ -11881,7 +12212,7 @@ index 0000000..a9917f4
 +	if (t->c2t_frac)
 +		tdelay += ((unsigned long long)cdelay * t->c2t_frac) >> 32;
 +
-+	t->set(tdelay, t->timer_set); return; if (tdelay < t->min_delay_ticks
++	t->set(tdelay, t->timer_set); return;  if (tdelay < t->min_delay_ticks
 +	    || t->set(tdelay, t->timer_set) < 0)
 +		ipipe_raise_irq(t->irq);
 +}
@@ -14759,7 +15090,6 @@ index 4d870eb..fa7217c 100644
 +EXPORT_SYMBOL_GPL(__ipipe_reenter_root);
 +
 +#endif /* CONFIG_IPIPE */
-diff --git a/kernel/sched/wait.c b/kernel/sched/wait.c
 diff --git a/kernel/sched/wait.c b/kernel/sched/wait.c
 index 852143a..efc4a6f 100644
 --- a/kernel/sched/wait.c

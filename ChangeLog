@@ -1,3 +1,77 @@
+2017-04-01 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/sched/sched.c: added the missing setting of the epoch
+	  origin (rt_gettimeorig) when hard timers are started, needed
+	  when REALTIME mode is used and some further cleaning more.
+	  (BTW, it is not a 1st of April fool).
+
+2017-03-28 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/include/rtai_sanity.h: allow using gcc version up to 5.
+
+2017-03-25 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/include/rtai_nam2num.h: added the construct extern "C" { }
+	 to  make it C++ friendlier.
+	* base/include/rtai_sched.h: added the declaration of the function 
+	  set_rtext, to avoid repeating it when used in a few files.
+	* base/ipc/netrpc.c: use the new declaration of set_rtext, omitting 
+	  a nomore used argument.
+	* base/sched/sys.c: use the new declaration of set_rtext, omitting 
+	  a nomore used argument.
+	* base/sched/sched.c: wiped out unused code, shortening the call
+	  list, because of a nomore used arg.
+
+2017-03-21 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/include/rtai_shm.h: fixed a few warnings and cleaned old
+	  stuff.
+	* addons/comedi/rtai_comedi.h: fixed warnings and a couple of
+	  distributed functions error, appearing only in C++.
+
+2017-03-19 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/wd/README.WATCHDOG: edited to inform that oneshot is the 
+	  only hard timer mode in use now.
+	* base/include/rtai_wd.h: wiped away a comment suggesting possible
+	  non oneshot hard time mode.
+	* base/wd/wd.c: force wd_OneShot to be always 1, oneshot is the
+          only hard timer mode in use now.
+	* base/sched/api.c: no more references to any hard timer mode but
+	  oneshot, be it in comments or code.
+	* base/sched/sched.c: cleaned dead code, wiped out anything
+	  referencing non oneshot hard timer mode, the only one in use
+	  now.
+
+2017-03-15 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/include/rtai_shm.h: wiped unused code away.
+	* base/include/rtai_schedcore.h: wiped unused code away, cleaned
+	  the code related to the nomore used periodic mode.
+
+2017-03-12 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/include/asm-x86/rtai_fpu.h: update for newer kernels, 
+	  code reworked, compacted and stremlined, no more per 32-64
+	  bit archs specific includes.
+
+2017-03-11 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/hal/hal.c: make it compile with FPU configured as 
+	  disabled.
+
+2017-03-10 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/hal/hal.c: update for newer kernels.
+	* base/sched/sys.c: update for newer kernels.
+	* base/include/asm-x86/rtai_lxrt.h: update for newer kernels.
+
+2017-03-09 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/include/rtai_lxrt.h, rtai_msg.h, rtai_netrpc.h, rtai_sem.h: fixed
+	  a bunch of unharmful warnings, quite annoying in large compilations,
+	  especially under g++, e.g (q)rtailab.
+
 2016-12-07 Paolo Mantegazza <mantegazza@aero.polimi.it>
 
 	* base/arch/x86/ihal/hal.c: fixed inconsistent declaration of 

@@ -6,7 +6,7 @@
  *
  * @author Paolo Mantegazza
  *
- * @note Copyright &copy; 1999-2004 Paolo Mantegazza <mantegazza@aero.polimi.it>
+ * @note Copyright &copy; 1999-2017 Paolo Mantegazza <mantegazza@aero.polimi.it>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -31,6 +31,10 @@ ACKNOWLEDGMENTS:
 
 #ifndef _RTAI_SHM_H
 #define _RTAI_SHM_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
 
 /** @addtogroup shm
  *@{*/
@@ -93,16 +97,6 @@ ACKNOWLEDGMENTS:
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
 
-#if 0
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0)
-#include <linux/wrapper.h>
-#else /* >= 2.6.0 */
-#include <linux/mm.h>
-#define mem_map_reserve(p)   SetPageReserved(p)
-#define mem_map_unreserve(p) ClearPageReserved(p)
-#endif /* < 2.6.0 */
-#endif
-
 #define UVIRT_TO_KVA(adr)  uvirt_to_kva(pgd_offset_k(adr), (adr))
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,10)
@@ -113,7 +107,6 @@ static inline int remap_page_range(struct vm_area_struct *vma, unsigned long uva
 #endif
 
 #include <rtai.h>
-//#include <asm/rtai_shm.h>
 
 #include <rtai_malloc.h>
 
@@ -130,18 +123,10 @@ static inline unsigned long uvirt_to_kva(pgd_t *pgd, unsigned long adr)
 {
 	if (!pgd_none(*pgd) && !pgd_bad(*pgd)) {
 		pmd_t *pmd;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,11)
-		pmd = pmd_offset(pgd, adr);
-#else /* >= 2.6.11 */
 		pmd = pmd_offset(pud_offset(pgd, adr), adr);
-#endif /* < 2.6.11 */
 		if (!pmd_none(*pmd)) {
 			pte_t *ptep, pte;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0)
-			ptep = pte_offset(pmd, adr);
-#else /* >= 2.6.0 */
 			ptep = pte_offset_kernel(pmd, adr);
-#endif /* < 2.6.0 */
 			pte = *ptep;
 			if (pte_present(pte)) {
 				return (((unsigned long)page_address(pte_page(pte))) | (adr & (PAGE_SIZE - 1)));
@@ -157,10 +142,6 @@ static inline unsigned long kvirt_to_pa(unsigned long adr)
 }
 
 #endif
-
-#ifdef __cplusplus
-extern "C" {
-#endif /* __cplusplus */
 
 int __rtai_shm_init(void);
 
@@ -214,10 +195,6 @@ int rkmmap(void *mem,
 	   unsigned long memsize,
 	   struct vm_area_struct *vma);
 
-#ifdef __cplusplus
-}
-#endif /* __cplusplus */
-
 #else /* !__KERNEL__ */
 
 #include <fcntl.h>
@@ -238,7 +215,7 @@ RTAI_PROTO (void *, _rt_shm_alloc, (void *start, unsigned long name, int size, i
 	if ((hook = open(RTAI_SHM_DEV, O_RDWR)) <= 0) {
 		return NULL;
 	} else {
-		struct { unsigned long name, arg, suprt; } arg = { name, size, suprt };
+		struct { unsigned long name; long arg, suprt; } arg = { name, size, suprt };
 #ifdef SHM_USE_LXRT
 		if ((size = rtai_lxrt(BIDX, SIZARG, SHM_ALLOC, &arg).i[LOW])) {
 #else
@@ -539,5 +516,9 @@ RTAI_PROTO(void, rt_named_free, (void *addr))
 #define rt_global_heap_close()  rt_heap_close(GLOBAL_HEAP_ID, 0)
 
 /*@}*/
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
 
 #endif /* !_RTAI_SHM_H */

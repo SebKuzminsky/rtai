@@ -35,6 +35,7 @@ Nov. 2001, Jan Kiszka (Jan.Kiszka@web.de) fix a tiny bug in __task_init.
 #include <linux/semaphore.h>
 #include <asm/uaccess.h>
 
+#define DEFINE_FPU_FPREGS_OWNER_CTX
 #include <rtai_sched.h>
 #include <rtai_lxrt.h>
 #include <rtai_sem.h>
@@ -58,13 +59,6 @@ EXPORT_SYMBOL(rt_fun_ext);
 #define USRLAND_MAX_MSG_SIZE  128  // Default max message size, used here only.
 
 int get_min_tasks_cpuid(unsigned long cpus_allowed);
-
-int set_rtext(RT_TASK *task,
-	      int priority,
-	      int uses_fpu,
-	      void(*signal)(void),
-	      unsigned int cpuid,
-	      struct task_struct *relink);
 
 int clr_rtext(RT_TASK *task);
 
@@ -244,7 +238,7 @@ RT_TASK* __task_init(unsigned long name, int prio, int stack_size, int max_msg_s
 	    } else {
 			cpus_allowed = rtai_cpuid();
 	    }
-	    if (!set_rtext(rt_task, prio, 0, 0, cpus_allowed, 0)) {
+	    if (!set_rtext(rt_task, prio, 0, 0, cpus_allowed)) {
 	        rt_task->fun_args = (long *)((struct fun_args *)(rt_task + 1));
 		rt_task->msg_buf[0] = msg_buf0;
 		rt_task->msg_buf[1] = msg_buf1;
