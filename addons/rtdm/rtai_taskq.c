@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2008-2010 Paolo Mantegazza <mantegazza@aero.polimi.it>
+ * Copyright (C) 2008-2017 Paolo Mantegazza <mantegazza@aero.polimi.it>
  *
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License as
@@ -50,10 +50,11 @@ void rt_schedule_readied(void)
 }
 EXPORT_SYMBOL(rt_schedule_readied);
  
-void rt_taskq_init(TASKQ *taskq, unsigned long type)
+void rt_taskq_init(TASKQ *taskq, unsigned int type)
 {
 	taskq->qtype = (type & TASKQ_FIFO) ? 1 : 0;
 	taskq->queue = (QUEUE) { &taskq->queue, &taskq->queue, NULL };
+	taskq->status = 0;
 }
 EXPORT_SYMBOL(rt_taskq_init);
 
@@ -85,16 +86,14 @@ int rt_taskq_ready_all(TASKQ *taskq, unsigned long why)
 	tosched = 0;
 	q = &(taskq->queue);
 	flags = rt_global_save_flags_and_cli();
-	while ((q = q->next) != &(taskq->queue)) {
-		if ((task = q->task)) {
-			dequeue_blocked(task = q->task);
-			rem_timed_task(task);
-			task->retval = why;
-			if (task->state != RT_SCHED_READY && (task->state &= ~(RT_SCHED_TASKQ | RT_SCHED_DELAYED)) == RT_SCHED_READY) {
-				enq_ready_task(task);
-				TOSCHED_TASK(task);
-				tosched = 1;
-			}
+	while ((q = q->next) != &(taskq->queue) && (task = q->task)) {
+		dequeue_blocked(task = q->task);
+		rem_timed_task(task);
+		task->retval = why;
+		if (task->state != RT_SCHED_READY && (task->state &= ~(RT_SCHED_TASKQ | RT_SCHED_DELAYED)) == RT_SCHED_READY) {
+			enq_ready_task(task);
+			TOSCHED_TASK(task);
+			tosched = 1;
 		}
 		rt_global_restore_flags(flags);
 		flags = rt_global_save_flags_and_cli();
@@ -136,8 +135,6 @@ void rt_taskq_wait_until(TASKQ *taskq, RTIME time)
 	DECLARE_RT_CURRENT;
 	unsigned long flags;
 	void *retp;
-
-	REALTIME2COUNT(time);
 
 	flags = rt_global_save_flags_and_cli();
 	ASSIGN_RT_CURRENT;

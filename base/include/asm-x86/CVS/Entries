@@ -1,4 +1,3 @@
-/GNUmakefile.am/1.1/Tue Oct 22 14:54:15 2013//
 /rtai.h/1.2/Wed Oct 28 19:23:32 2015//
 /rtai_atomic.h/1.1/Tue Oct 22 14:54:15 2013//
 /rtai_atomic_32.h/1.2/Wed Oct 28 19:23:32 2015//
@@ -7,8 +6,6 @@
 /rtai_fpu_32.h/1.2/Wed Oct 28 19:23:32 2015//
 /rtai_fpu_64.h/1.2/Wed Oct 28 19:23:32 2015//
 /rtai_hal.h/1.4/Wed Oct 28 19:23:32 2015//
-/rtai_hal_32.h/1.3/Wed Oct 28 19:23:32 2015//
-/rtai_hal_64.h/1.3/Wed Oct 28 19:23:32 2015//
 /rtai_leds.h/1.1/Tue Oct 22 14:54:15 2013//
 /rtai_lxrt_32.h/1.3/Wed Oct 28 19:23:33 2015//
 /rtai_lxrt_64.h/1.3/Wed Oct 28 19:23:33 2015//
@@ -20,7 +17,10 @@
 /rtai_srq.h/1.1/Tue Oct 22 14:54:15 2013//
 /rtai_usi.h/1.1/Tue Oct 22 14:54:15 2013//
 /rtai_vectors.h/1.2/Wed Oct 28 19:23:33 2015//
-/GNUmakefile.in/1.5/Thu May 12 22:31:04 2016//
 /rtai_fpu.h/1.3/Wed Apr 12 21:46:32 2017//
 /rtai_lxrt.h/1.5/Wed Apr 12 21:46:32 2017//
+/GNUmakefile.am/1.2/Wed May  3 16:42:27 2017//
+/GNUmakefile.in/1.6/Wed May  3 16:42:27 2017//
+/rtai_hal_32.h/1.5/Wed May  3 16:42:27 2017//
+/rtai_hal_64.h/1.5/Wed May  3 16:42:27 2017//
 D

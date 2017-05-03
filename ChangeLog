@@ -1,3 +1,45 @@
+2017-04-21 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* addons/rtdm/rtai_taskq.c: anticipate a null task pointer check in
+	  the while loop termination test of rt_taskq_ready_all.
+
+2017-04-20 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* addons/rtdm/all files: extensively revised and updated.
+
+2017-04-18 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/hal/hal.c: as for the previous version, use a spinlock
+	  to make rtai_rdtsc 32 bits atomic.
+
+2017-04-16 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/include/asm-x86/rtai_hal_32.h and rtai_hal_64.h: take care
+	  of the refurbished synchronization of the TCSes.
+	* base/sched/sys.c: get rid of too old kernel versions support.
+	* base/ipc/fifos/fifos.c: get rid of too old kernel versions support.
+	* base/shm/kvmem.c: get rid of too old kernel versions support.
+	* base/include/asm-x86: make got rid of the nomore needed 32-64 bits
+	  specific fpu headers.
+
+2017-04-15 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/hal/hal.c: the TSC alignment hack is now closer 
+	  to  what found in arch/ia64/kernel/smpboot.c; got rid of useless
+	  older Linux versions; exported sync_tsc for possible independent
+	  uses.
+	* base/arch/x86/hal/GNUmakefile.am and GNUmakefile.in: get make rid 
+	  of no more used, arch dependent, hal_32.c and hal_64.c.
+
+2017-04-14 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/arch/x86/hal/hal.c: extend multi processor TSCs alignment
+	  to x86_64.
+	* base/include/asm-x86/rtai_hal_64.h: added support for correcting
+	  TSCs misalignments.
+	* base/arch/x86/Kconfig: edited to be up to date with the latest
+	  TSC alignment stuff.
+
 2017-04-01 Paolo Mantegazza <mantegazza@aero.polimi.it>
 
 	* base/sched/sched.c: added the missing setting of the epoch
