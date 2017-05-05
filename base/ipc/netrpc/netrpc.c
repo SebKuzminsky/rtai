@@ -79,10 +79,14 @@ MODULE_LICENSE("GPL");
 
 #define NETRPC_STACK_SIZE  6000
 
+#undef MAX_STUBS
+#define MAX_STUBS 64
 static unsigned long MaxStubs = MAX_STUBS;
 RTAI_MODULE_PARM(MaxStubs, ulong);
 static int MaxStubsMone;
 
+#undef MAX_SOCKS
+#define MAX_SOCKS 64
 static unsigned long MaxSocks = MAX_SOCKS;
 RTAI_MODULE_PARM(MaxSocks, ulong);
 
