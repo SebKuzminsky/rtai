@@ -19,6 +19,8 @@
   Take also into account that without ACPI enabled you might not see more than 
   a single CPU.
 - Recent Intel SpeedStepping and Boosting.
+- Do not enable IPIPE lagacy support. As a safety measure againt such a choice, 
+  RTAI build is inihibited at the making of rtai_hal.ko.
 - Do not disable USB, but just any legacy support, possibly in the BIOS also. Once
   upon a time old USB was a source of high RTAI latencies. Now that should be  
   legacy support. 
@@ -32,6 +34,9 @@
   the more efficient solution.
 - If it is of no interest to you, disable any kernel debug support. It is suggested
   to always do so for production work.
+- If you witness a stack protector crash, disable stack protector support, at the
+  bottom of the kernel config General Setup. Then, report as much as possible of 
+  what you saw to the RTAI mailing list.
 
 
 < RTAI related >

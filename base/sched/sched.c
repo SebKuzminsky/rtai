@@ -72,9 +72,9 @@ MODULE_LICENSE("GPL");
 
 int KernelLatency, UserLatency;
 static int kernel_latency = 0;
-module_param(KernelLatency, int, S_IRUGO);
+module_param(kernel_latency, int, S_IRUGO);
 static int user_latency = 0;
-module_param(UserLatency, int, S_IRUGO);
+module_param(user_latency, int, S_IRUGO);
 
 /* +++++++++++++++++ WHAT MUST BE AVAILABLE EVERYWHERE ++++++++++++++++++++++ */
 
@@ -2475,9 +2475,11 @@ static void calibrate_latencies(void)
 		tuned.timers_tol[cpuid] = rt_half_tick = 0;
 	}
 
-	sprintf(arg2, "%d", recalibrate ? -1 : 0);
-	printk("USERMODE CHECK: %s.\n", !call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC) ? "OK" : "ERROR");
-	printk("USERMODE CHECK PROVIDED (ns): KernelLatency %d, UserLatency %d.\n", KernelLatency > 0 ? (int)count2nano(KernelLatency) : KernelLatency, UserLatency > 0 ? (int)count2nano(UserLatency) : UserLatency);
+	if (!kernel_latency || !user_latency) {
+		sprintf(arg2, "%d", recalibrate ? -1 : 0);
+		printk("USERMODE CHECK: %s.\n", !call_usermodehelper(argv[0], argv, envp, UMH_WAIT_PROC) ? "OK" : "ERROR");
+		printk("USERMODE CHECK PROVIDED (ns): KernelLatency %d, UserLatency %d.\n", KernelLatency > 0 ? (int)count2nano(KernelLatency) : KernelLatency, UserLatency > 0 ? (int)count2nano(UserLatency) : UserLatency);
+	}
 
 	if (kernel_latency > 0) {
 		KernelLatency = nano2count(kernel_latency);

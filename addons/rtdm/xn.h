@@ -611,6 +611,9 @@ typedef struct xnsched xnsched_t;
 
 #define xntbase_ticks2ns(a, b) rt_get_time_ns()
 
+#ifndef SPIN_LOCK_UNLOCKED
+#define SPIN_LOCK_UNLOCKED {  { .rlock = { .raw_lock = __ARCH_SPIN_LOCK_UNLOCKED } } }
+#endif
 #define RTHAL_SPIN_LOCK_UNLOCKED SPIN_LOCK_UNLOCKED
 
 #define rthal_spinlock_t spinlock_t
@@ -629,8 +632,20 @@ typedef struct xnsched xnsched_t;
 #define __xnpod_lock_sched   rt_sched_lock 
 #define __xnpod_unlock_sched rt_sched_unlock 
 
-int ipipe_virtualize_irq(void *, unsigned int, void *, void *, void *, unsigned int);
-void ipipe_trigger_irq(unsigned int);
+static inline int ipipe_virtualize_irq(struct ipipe_domain *ipd, unsigned int irq, ipipe_irq_handler_t handler, void *cookie, ipipe_irq_ackfn_t ackfn, unsigned int unused)
+{
+	if (handler == NULL) {
+		ipipe_free_irq(ipd, irq);
+		return 0;
+	}
+	return ipipe_request_irq(ipd, irq, handler, cookie, ackfn);
+}
+
+static inline int ipipe_trigger_irq(unsigned int irq)
+{
+	ipipe_raise_irq(irq);
+	return 1;
+}
 
 #define rthal_alloc_virq     ipipe_alloc_virq
 #define rthal_virtualize_irq ipipe_virtualize_irq

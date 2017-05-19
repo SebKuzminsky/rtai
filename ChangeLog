@@ -1,3 +1,29 @@
+2017-05-16 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* addons/rtdm/xn.h: keep rtdm unchanged, as far as possible, by 
+	  providing a couple of no more available patch legacy functions.
+
+2017-05-15 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/include/rtai_netrpc.h: to avoid troubles with linux > 4.1.18
+	  set a safe number of MAX SOCKS and STUBS; a newer version of netrpc
+          will allow more with linux > 4.1.18 also.
+	* base/ipc/netrpc.c: refurbished version, supporting a large number 
+	  of SOCKS and STUBS also with linux > 4.1.18; it works as the former
+	  release for any linux version, but needs a change to the module
+	  for making it effective the supoort of a larger number of SOCKS 
+	  and STUBS with linux > 4.1.18.
+
+2017-05-15 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* addons/rtdm/xn.h: define SPIN_LOCK_UNLOCKED, if it is not defined.
+
+2017-05-09 Paolo Mantegazza <mantegazza@aero.polimi.it>
+
+	* base/sched/sched.c: fixed wrong module parm declaration for 
+	kernel_latency and user_latency. Don't look for calibrated
+	latencies if any of kernel_latency and user_latency is not zero.
+
 2016-05-05 Pierangelo Masarati <pierangelo.masarati@polimi.it>
 
 	* RTAI 5.0
