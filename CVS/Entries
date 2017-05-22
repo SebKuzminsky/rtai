@@ -1,4 +1,3 @@
-/GNUmakefile.am/1.12/Thu Apr  9 15:15:24 2009//
 /README.INSTALL/1.18/Tue Oct 22 14:54:14 2013//
 /README.ISOLCPUS/1.17/Wed Oct 28 19:23:29 2015//
 /README.LINUX_SERVER/1.9/Sat Dec 31 20:26:31 2011//
@@ -12,10 +11,11 @@ D/doc////
 D/rtai-lab////
 D/rtai-py////
 D/testsuite////
-/GNUmakefile.in/1.31/Thu May 12 22:31:01 2016//
 /README.SMI/1.2/Thu May 12 22:31:01 2016//
-/configure/1.113/Thu May 12 22:31:01 2016//
-/configure.in/1.113/Thu May 12 22:31:01 2016//
 /rtai_config.h.in/1.24/Thu May 12 22:31:01 2016//
-/ChangeLog/1.579/Fri May 19 18:07:08 2017//
 /README.CONF_RMRKS/1.3/Fri May 19 18:07:08 2017//
+/ChangeLog/1.580/Mon May 22 16:56:07 2017//
+/GNUmakefile.am/1.13/Mon May 22 16:56:07 2017//
+/GNUmakefile.in/1.32/Mon May 22 16:56:07 2017//
+/configure/1.114/Mon May 22 16:56:07 2017//
+/configure.in/1.114/Mon May 22 16:56:07 2017//

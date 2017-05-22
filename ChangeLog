@@ -18,6 +18,14 @@
 
 	* addons/rtdm/xn.h: define SPIN_LOCK_UNLOCKED, if it is not defined.
 
+2016-05-15 Pierangelo Masarati <pierangelo.masarati@polimi.it>
+
+	* RTAI 5.1
+
+2016-05-15 Pierangelo Masarati <pierangelo.masarati@polimi.it>
+
+	* README.CONF_RMRKS: added missing file
+
 2017-05-09 Paolo Mantegazza <mantegazza@aero.polimi.it>
 
 	* base/sched/sched.c: fixed wrong module parm declaration for 

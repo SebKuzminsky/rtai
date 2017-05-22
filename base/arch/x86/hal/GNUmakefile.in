@@ -100,8 +100,7 @@ am__v_AR_ = $(am__v_AR_@AM_DEFAULT_V@)
 am__v_AR_0 = @echo "  AR      " $@;
 am__v_AR_1 = 
 libhal_a_LIBADD =
-am__libhal_a_SOURCES_DIST = hal.c
-am_libhal_a_OBJECTS = hal.$(OBJEXT) $(am__objects_1) $(am__objects_2)
+am_libhal_a_OBJECTS = hal.$(OBJEXT)
 libhal_a_OBJECTS = $(am_libhal_a_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -142,7 +141,7 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libhal_a_SOURCES)
-DIST_SOURCES = $(am__libhal_a_SOURCES_DIST)
+DIST_SOURCES = $(libhal_a_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -351,7 +350,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 moduledir = @RTAI_MODULE_DIR@
 modext = @RTAI_MODULE_EXT@
-libhal_a_SOURCES = hal.c $(am__append_1) $(am__append_2)
+libhal_a_SOURCES = hal.c
 @CONFIG_KBUILD_FALSE@noinst_LIBRARIES = libhal.a
 @CONFIG_KBUILD_FALSE@libhal_a_AR = $(CROSS_COMPILE)ar cru
 @CONFIG_KBUILD_FALSE@INCLUDES = \
@@ -556,8 +555,8 @@ distclean-generic:
 maintainer-clean-generic:
 	@echo "This command is intended for maintainers to use"
 	@echo "it deletes files that may require special tools to rebuild."
-@CONFIG_KBUILD_FALSE@distclean-local:
 @CONFIG_KBUILD_FALSE@clean-local:
+@CONFIG_KBUILD_FALSE@distclean-local:
 clean: clean-am
 
 clean-am: clean-generic clean-libtool clean-local \
