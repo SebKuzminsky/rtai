@@ -30,7 +30,7 @@ CONFIGURE += --enable-fpu
 CONFIGURE += --enable-math=m
 CONFIGURE += --enable-math-c99
 
-CONFIGURE += --enable-cpus=8
+CONFIGURE += --enable-cpus=4
 
 CONFIGURE += --enable-ktasks-sched-lxrt
 
